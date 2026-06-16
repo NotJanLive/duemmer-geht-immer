@@ -1,0 +1,53 @@
+kind: pipeline
+type: docker
+name: default
+
+steps:
+  - name: Build
+    image: node:20
+    commands:
+      - npm ci
+      - npm run build
+      - npm run build:server
+      - mkdir deploy
+      - cp -rv .next deploy/
+      - cp -rv public deploy/
+      - cp -rv dist deploy/
+      - cp package.json deploy/
+      - cp package-lock.json deploy/
+      - cp next.config.ts deploy/
+      - cd deploy && npm ci --omit=dev
+
+  - name: Upload
+    image: appleboy/drone-scp
+    settings:
+      host:
+        from_secret: address
+      username: root
+      password:
+        from_secret: ssh_password
+      source: deploy/
+      target: /var/lib/docker/volumes/duemmer_geht_immer/_data
+      strip_components: 1
+
+  - name: Deploy
+    image: appleboy/drone-ssh
+    settings:
+      host:
+        from_secret: address
+      username: root
+      password:
+        from_secret: ssh_password
+      script:
+        - docker stop duemmer_geht_immer || true
+        - docker rm duemmer_geht_immer || true
+        - |
+          docker run -d \
+            --name duemmer_geht_immer \
+            --restart always \
+            -p 680:3000 \
+            -p 6443:3000 \
+            -e NODE_ENV=production \
+            -v duemmer_geht_immer:/app \
+            -w /app \
+            node:20-alpine node dist/server.js
