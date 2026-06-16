@@ -45,8 +45,8 @@ steps:
           docker run -d \
             --name duemmer_geht_immer \
             --restart always \
-            -p 680:3000 \
-            -p 6443:3000 \
+            -p 780:3000 \
+            -p 7443:3000 \
             -e NODE_ENV=production \
             -v duemmer_geht_immer:/app \
             -w /app \
