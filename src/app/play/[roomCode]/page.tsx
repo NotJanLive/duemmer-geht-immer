@@ -184,39 +184,91 @@ export default function PlayPage() {
     }
   };
 
+  const getPreviousModeLabel = () => {
+    const modes = ["Last Man Standing", "Wer wird Millionär?", "Higher or Lower", "Jeopardy"];
+    return modes[gameState.modeIndex] || "Unbekannt";
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-zinc-900 p-4">
       {/* Header */}
-      <div className="max-w-2xl mx-auto mb-6">
+      <div className={`mx-auto mb-6 ${gameState.currentMode === 'finale' ? 'w-full px-2' : (gameState.currentMode === 'lobby' || gameState.currentMode === 'lastManStanding' || gameState.currentMode === 'leaderboard' || gameState.currentMode === 'millionaire' || gameState.currentMode === 'higherLower' || gameState.currentMode === 'jeopardy') ? 'max-w-5xl' : 'max-w-2xl'}`}>
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Dümmer geht Immer</h1>
-            <Badge className="bg-white text-black mt-1">{getModeLabel()}</Badge>
-          </div>
-          <div className="text-right flex flex-col items-end">
-            <p className="text-zinc-400 text-sm font-bold">{currentPlayer?.name || "Spieler"}</p>
-            {gameState.currentMode !== 'lobby' && gameState.currentMode !== 'finale' && (
-              <div className="flex items-baseline justify-end gap-1">
-                <span className="text-3xl font-black text-white italic tracking-tighter">
-                  {currentPlayer?.currentModeScore || 0}
-                </span>
-                <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">PKT</span>
+          {gameState.currentMode === 'lobby' || gameState.currentMode === 'lastManStanding' || gameState.currentMode === 'leaderboard' || gameState.currentMode === 'millionaire' || gameState.currentMode === 'higherLower' || gameState.currentMode === 'jeopardy' || gameState.currentMode === 'finale' ? (
+            <>
+              {/* Lobby, Last Man Standing, Leaderboard, Millionaire & Higher or Lower Header - Title centered */}
+              <div className="flex-1 pl-2"></div>
+              <div className="flex-1 text-center">
+                <h1 className="text-4xl md:text-5xl font-black text-white uppercase italic tracking-tighter leading-none bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  {gameState.currentMode === 'lobby' ? 'Lobby' : gameState.currentMode === 'lastManStanding' ? 'Last Man Standing' : gameState.currentMode === 'millionaire' ? 'Wer wird Millionär?' : gameState.currentMode === 'higherLower' ? 'Higher or Lower' : gameState.currentMode === 'jeopardy' ? 'Jeopardy' : gameState.currentMode === 'finale' ? '🏆 FINALE 🏆' : 'Punkte der Runde'}
+                </h1>
+                {gameState.currentMode === 'leaderboard' && (
+                  <p className="text-blue-500 font-bold uppercase tracking-widest text-xs mt-2">{getPreviousModeLabel()}</p>
+                )}
+                {gameState.currentMode === 'finale' && (
+                  <p className="text-yellow-500 font-bold uppercase tracking-widest text-xs mt-2">Wer holt sich den Sieg?</p>
+                )}
               </div>
-            )}
-            <Badge variant="outline" className="border-green-500/50 text-green-500 mt-1 text-[8px] uppercase font-black tracking-widest">
-              {gameState.players.filter(p => p.connected).length} / {gameState.players.length} Spieler
-            </Badge>
-          </div>
+              <div className="flex-1 text-right flex flex-col items-end pr-2">
+                <p className="text-zinc-400 text-sm font-bold">{currentPlayer?.name || "Spieler"}</p>
+                {gameState.currentMode !== 'lobby' && gameState.currentMode !== 'leaderboard' && gameState.currentMode !== 'millionaire' && gameState.currentMode !== 'jeopardy' && gameState.currentMode !== 'finale' && (
+                  <div className="flex items-baseline justify-end gap-1">
+                    <span className="text-3xl font-black text-white italic tracking-tighter">
+                      {currentPlayer?.currentModeScore || 0}
+                    </span>
+                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">PKT</span>
+                  </div>
+                )}
+                {gameState.currentMode === 'higherLower' && gameState.higherLower && (
+                  <div className="flex gap-1 justify-end text-lg mt-1">
+                    {Array.from({ length: 2 }).map((_, i) => {
+                      const lives = gameState.higherLower?.playerLives[currentPlayer?.id || ""] || 0;
+                      return (
+                        <span key={i} className={`transition-all duration-500 ${i < lives ? "drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]" : "grayscale opacity-20"}`}>
+                          ❤️
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                <Badge variant="outline" className="border-green-500/50 text-green-500 mt-1 text-[8px] uppercase font-black tracking-widest">
+                  {gameState.players.filter(p => p.connected).length} / {gameState.players.length} Spieler
+                </Badge>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Other Modes Header - Original style */}
+              <div>
+                <h1 className="text-2xl font-bold text-white">Dümmer geht Immer</h1>
+                <Badge className="bg-white text-black mt-1">{getModeLabel()}</Badge>
+              </div>
+              <div className="text-right flex flex-col items-end">
+                <p className="text-zinc-400 text-sm font-bold">{currentPlayer?.name || "Spieler"}</p>
+                {gameState.currentMode !== 'finale' && (
+                  <div className="flex items-baseline justify-end gap-1">
+                    <span className="text-3xl font-black text-white italic tracking-tighter">
+                      {currentPlayer?.currentModeScore || 0}
+                    </span>
+                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">PKT</span>
+                  </div>
+                )}
+                <Badge variant="outline" className="border-green-500/50 text-green-500 mt-1 text-[8px] uppercase font-black tracking-widest">
+                  {gameState.players.filter(p => p.connected).length} / {gameState.players.length} Spieler
+                </Badge>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {/* Game Content */}
-      <div className="max-w-2xl mx-auto">
+      <div className={`mx-auto ${(gameState.currentMode === 'lobby' || gameState.currentMode === 'lastManStanding' || gameState.currentMode === 'higherLower' || gameState.currentMode === 'jeopardy') ? 'max-w-5xl' : 'max-w-2xl'}`}>
         {renderGameMode()}
       </div>
 
-      {/* Mini-Leaderboard at bottom (current round only) - Vertical List */}
-      {gameState.currentMode !== 'lobby' && gameState.currentMode !== 'leaderboard' && gameState.currentMode !== 'finale' && (
+      {/* Mini-Leaderboard - Bottom for non-sidebar modes, hidden for sidebar modes */}
+      {gameState.currentMode !== 'lobby' && gameState.currentMode !== 'leaderboard' && gameState.currentMode !== 'finale' && gameState.currentMode !== 'higherLower' && gameState.currentMode !== 'lastManStanding' && gameState.currentMode !== 'millionaire' && gameState.currentMode !== 'jeopardy' && (
         <div className="max-w-md mx-auto mt-16 pb-12">
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-3xl p-6 shadow-[0_0_50px_rgba(0,0,0,0.5)] backdrop-blur-md">
             <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.4em] mb-6 text-center italic opacity-50">Live Rundenstand</p>
@@ -248,7 +300,7 @@ export default function PlayPage() {
                               <Badge className="bg-green-600/20 text-green-500 border border-green-500/30 text-[7px] font-black px-1.5 py-0 h-3.5 ml-2 animate-pulse">EINGELOGGT</Badge>
                             )}
                             {holLives !== null && (
-                              <div className="flex gap-0.5 ml-1 text-[8px]">
+                              <div className="flex gap-0.5 ml-1 text-sm">
                                 {"❤️".repeat(holLives)}
                                 {"🖤".repeat(Math.max(0, 2 - holLives))}
                               </div>

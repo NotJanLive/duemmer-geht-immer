@@ -53,42 +53,26 @@ export default function AdminLastManStanding() {
 
   return (
     <div className="space-y-4 pb-24">
-      {/* Header Info */}
-      <div className="bg-zinc-900/50 p-4 rounded-3xl border border-zinc-800 shadow-xl backdrop-blur-sm">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter leading-none">Last Man Standing</h2>
-            <p className="text-zinc-500 text-[10px] uppercase font-black tracking-widest mt-1">Runde {lms.currentRound + 1} / {lms.totalRounds}</p>
-          </div>
-          <div className="text-right">
+      {/* Topic Card with Status */}
+      <Card className="bg-gradient-to-br from-zinc-900 to-black border-zinc-800 shadow-2xl overflow-hidden relative rounded-2xl">
+        <div className="absolute top-0 left-0 w-full h-1 bg-blue-600" />
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-left">
+              <p className="text-zinc-500 text-[8px] uppercase font-black tracking-[0.2em] mb-1">Thema der Runde</p>
+              <h3 className="text-2xl font-black text-white leading-tight uppercase italic tracking-tighter">{currentRound.topic}</h3>
+            </div>
             <Badge className="bg-white text-black font-black italic shadow-lg">
               {revealedCount} / {totalCards} KARTEN
             </Badge>
           </div>
-        </div>
-        
-        {/* Status Indicator */}
-        {currentPlayer && !roundComplete && (
-          <div className="bg-blue-600/20 border border-blue-500/30 p-2 rounded-xl text-center">
-            <span className="text-blue-400 font-black uppercase italic tracking-widest text-[10px] animate-pulse">★ {currentPlayer.name} ist aktuell dran</span>
-          </div>
-        )}
 
-        <div className="flex gap-1.5 mt-4 justify-center">
-          {currentRound.cards.map((_, index) => (
-            <div 
-              key={index} 
-              className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${index < revealedCount ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]" : "bg-zinc-800"}`} 
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Topic Card */}
-      <Card className="bg-zinc-900 border-zinc-800 shadow-xl overflow-hidden relative rounded-2xl">
-        <CardContent className="p-3 text-center">
-          <p className="text-zinc-500 text-[8px] uppercase font-black tracking-widest mb-0.5">Thema</p>
-          <h3 className="text-xl font-black text-white italic tracking-tighter uppercase leading-tight">{currentRound.topic}</h3>
+          {/* Status Indicator */}
+          {currentPlayer && !roundComplete && (
+            <div className="bg-blue-600/20 border border-blue-500/30 p-2 rounded-xl text-center">
+              <span className="text-blue-400 font-black uppercase italic tracking-widest text-[10px]">★ {currentPlayer.name} ist aktuell dran</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 

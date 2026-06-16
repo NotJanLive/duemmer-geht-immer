@@ -25,7 +25,7 @@ export default function PlayerLobby() {
             <div className="text-5xl font-mono font-black text-white tracking-widest mb-6 drop-shadow-lg">
               {gameState.roomCode}
             </div>
-            
+
             <div className="flex justify-center mb-2">
               <div className="flex space-x-2">
                 <div className="w-2 h-2 bg-zinc-600 rounded-full animate-bounce"></div>
@@ -39,19 +39,20 @@ export default function PlayerLobby() {
         </Card>
       </div>
 
-      {/* Players List (Same as Admin) */}
-      <Card className="bg-zinc-900 border-zinc-800 shadow-xl overflow-hidden rounded-3xl">
-        <CardHeader className="pb-0">
-          <CardTitle className="text-white uppercase text-[10px] tracking-widest font-black flex justify-between items-center">
-            <span>Spieler ({gameState.players.length})</span>
-            <Badge variant="outline" className="border-zinc-700 text-zinc-500 font-mono text-[8px]">
-              Alphabetisch sortiert
-            </Badge>
-          </CardTitle>
-          <div className="h-px bg-zinc-800 mt-4 -mx-6" />
-        </CardHeader>
-        <CardContent className="p-0 mt-2">
-          <ScrollArea className="h-64">
+      {/* Two Column Layout for Players and Game Info */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Players List (Same as Admin) */}
+        <Card className="bg-zinc-900 border-zinc-800 shadow-xl overflow-hidden rounded-3xl">
+          <CardHeader className="pb-0">
+            <CardTitle className="text-white uppercase text-[10px] tracking-widest font-black flex justify-between items-center">
+              <span>Spieler ({gameState.players.length})</span>
+              <Badge variant="outline" className="border-zinc-700 text-zinc-500 font-mono text-[8px]">
+                Alphabetisch sortiert
+              </Badge>
+            </CardTitle>
+            <div className="h-px bg-zinc-800 mt-4 -mx-6" />
+          </CardHeader>
+          <CardContent className="p-0 mt-2">
             <div className="space-y-1 p-2">
               {sortedPlayers.map((player, index) => {
                 const isMe = player.id === playerId;
@@ -69,8 +70,8 @@ export default function PlayerLobby() {
                     <Badge
                       variant="outline"
                       className={`font-black text-[8px] uppercase tracking-widest ${
-                        player.connected 
-                          ? "border-green-500/50 text-green-500" 
+                        player.connected
+                          ? "border-green-500/50 text-green-500"
                           : "border-red-500/50 text-red-500"
                       }`}
                     >
@@ -80,47 +81,47 @@ export default function PlayerLobby() {
                 );
               })}
             </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Game Info (Spielablauf) */}
-      <Card className="bg-zinc-900 border-zinc-800 shadow-xl overflow-hidden rounded-3xl">
-        <CardHeader className="pb-0">
-          <CardTitle className="text-white uppercase text-[10px] tracking-widest font-black italic">Spielablauf</CardTitle>
-          <div className="h-px bg-zinc-800 mt-4 -mx-6" />
-        </CardHeader>
-        <CardContent className="p-6 pt-4 text-zinc-400 space-y-4">
-          <div className="flex items-center gap-4 group">
-            <span className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center font-black text-white italic group-hover:bg-blue-600 transition-colors">1</span>
-            <div>
-              <p className="font-black text-sm text-white uppercase italic tracking-tighter">Last Man Standing</p>
-              <p className="text-[10px] uppercase font-bold text-zinc-600 tracking-wide">Karten erraten und überleben</p>
+        {/* Game Info (Spielablauf) */}
+        <Card className="bg-zinc-900 border-zinc-800 shadow-xl overflow-hidden rounded-3xl">
+          <CardHeader className="pb-0">
+            <CardTitle className="text-white uppercase text-[10px] tracking-widest font-black italic">Spielablauf</CardTitle>
+            <div className="h-px bg-zinc-800 mt-4 -mx-6" />
+          </CardHeader>
+          <CardContent className="p-6 pt-4 text-zinc-400 space-y-4">
+            <div className="flex items-center gap-4 group">
+              <span className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center font-black text-white italic group-hover:bg-blue-600 transition-colors">1</span>
+              <div>
+                <p className="font-black text-sm text-white uppercase italic tracking-tighter">Last Man Standing</p>
+                <p className="text-[10px] uppercase font-bold text-zinc-600 tracking-wide">Karten erraten und überleben</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4 group">
-            <span className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center font-black text-white italic group-hover:bg-blue-600 transition-colors">2</span>
-            <div>
-              <p className="font-black text-sm text-white uppercase italic tracking-tighter">Wer wird Millionär?</p>
-              <p className="text-[10px] uppercase font-bold text-zinc-600 tracking-wide">30 Fragen mit steigendem Wert</p>
+            <div className="flex items-center gap-4 group">
+              <span className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center font-black text-white italic group-hover:bg-blue-600 transition-colors">2</span>
+              <div>
+                <p className="font-black text-sm text-white uppercase italic tracking-tighter">Wer wird Millionär?</p>
+                <p className="text-[10px] uppercase font-bold text-zinc-600 tracking-wide">30 Fragen mit steigendem Wert</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4 group">
-            <span className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center font-black text-white italic group-hover:bg-blue-600 transition-colors">3</span>
-            <div>
-              <p className="font-black text-sm text-white uppercase italic tracking-tighter">Higher or Lower</p>
-              <p className="text-[10px] uppercase font-bold text-zinc-600 tracking-wide">Werte richtig auf der Skala ordnen</p>
+            <div className="flex items-center gap-4 group">
+              <span className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center font-black text-white italic group-hover:bg-blue-600 transition-colors">3</span>
+              <div>
+                <p className="font-black text-sm text-white uppercase italic tracking-tighter">Higher or Lower</p>
+                <p className="text-[10px] uppercase font-bold text-zinc-600 tracking-wide">Werte richtig auf der Skala ordnen</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4 group">
-            <span className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center font-black text-white italic group-hover:bg-blue-600 transition-colors">4</span>
-            <div>
-              <p className="font-black text-sm text-white uppercase italic tracking-tighter">Jeopardy</p>
-              <p className="text-[10px] uppercase font-bold text-zinc-600 tracking-wide">Das große Finale mit dem Buzzer</p>
+            <div className="flex items-center gap-4 group">
+              <span className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center font-black text-white italic group-hover:bg-blue-600 transition-colors">4</span>
+              <div>
+                <p className="font-black text-sm text-white uppercase italic tracking-tighter">Jeopardy</p>
+                <p className="text-[10px] uppercase font-bold text-zinc-600 tracking-wide">Das große Finale mit dem Buzzer</p>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

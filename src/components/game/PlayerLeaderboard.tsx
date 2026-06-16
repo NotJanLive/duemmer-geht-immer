@@ -18,12 +18,6 @@ export default function PlayerLeaderboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="text-center">
-        <h2 className="text-3xl font-black text-white mb-1 uppercase italic tracking-tighter leading-none">Punkte der Runde</h2>
-        <p className="text-blue-500 font-bold uppercase tracking-widest text-xs">{currentModeLabel}</p>
-      </div>
-
       {/* My Position (Current Round Only) - Inverted to Black */}
       <Card className="bg-black text-white shadow-[0_0_50px_rgba(0,0,0,0.3)] border border-zinc-800">
         <CardContent className="p-8 text-center">

@@ -171,11 +171,6 @@ export default function AdminFinale() {
         </div>
       )}
 
-      <div className="text-center">
-        <h2 className="text-6xl font-black text-white mb-2 uppercase italic tracking-tighter drop-shadow-2xl">🏆 FINALE 🏆</h2>
-        <p className="text-zinc-500 font-bold uppercase tracking-[0.5em] text-sm">Dümmer geht Immer</p>
-      </div>
-
       {winnerId && (
          <div className="text-center py-6 px-4">
             <p className="text-xl font-black uppercase italic tracking-widest text-yellow-500 mb-2 drop-shadow-md">Der Gewinner ist</p>

@@ -71,56 +71,44 @@ export default function AdminHigherLower() {
   };
 
   return (
-    <div className="space-y-6 pb-24">
-      {/* Header Info */}
-      <div className="bg-zinc-900/50 p-3 rounded-2xl border border-zinc-800 shadow-xl backdrop-blur-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-black text-white uppercase italic tracking-tighter leading-none">Higher or Lower</h2>
-            <p className="text-zinc-500 text-[8px] uppercase font-black tracking-widest mt-1">Runde {hol.currentRound + 1} von {hol.totalRounds}</p>
-          </div>
-          <div className="text-right">
-            <Badge className="bg-white text-black font-black italic shadow-lg uppercase text-[10px] py-0 h-6">
-              {currentRound.topic}
-            </Badge>
-          </div>
-        </div>
-      </div>
+    <div className="max-w-4xl mx-auto space-y-3 pb-24">
+      {/* Topic Card */}
+      <Card className="bg-gradient-to-br from-zinc-900 to-black border-zinc-800 shadow-2xl overflow-hidden relative rounded-2xl">
+        <div className="absolute top-0 left-0 w-full h-1 bg-blue-600" />
+        <CardContent className="p-6 text-center">
+          <p className="text-zinc-500 text-[8px] uppercase font-black tracking-[0.2em] mb-1">Thema der Runde</p>
+          <p className="text-2xl font-black text-white leading-tight uppercase italic tracking-tighter">{currentRound.topic}</p>
+          <p className="text-zinc-600 text-[9px] uppercase font-black tracking-widest mt-1.5">Runde {hol.currentRound + 1} / {hol.totalRounds}</p>
 
-      {/* Control Panel for Current Player Actions */}
-      <Card className="bg-zinc-900 border-zinc-800 shadow-2xl overflow-hidden rounded-2xl">
-        <div className="bg-zinc-800/50 p-2 flex justify-between items-center border-b border-zinc-800">
-          <span className="text-[8px] font-black uppercase text-zinc-500 tracking-widest">Rundensteuerung</span>
-          <Badge variant="outline" className="border-zinc-700 text-white font-black uppercase italic text-[8px] py-0 h-5">
-            {currentPlayer?.name} ist dran
-          </Badge>
-        </div>
+          <div className="mt-3 inline-flex items-center gap-2 bg-zinc-800/50 px-2 py-0.5 rounded-full border border-zinc-700">
+            <span className="text-[8px] text-zinc-500 font-black uppercase">Einheit:</span>
+            <span className="text-[10px] text-zinc-300 font-black italic">{currentRound.unit}</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Rundensteuerung */}
+      <Card className="bg-zinc-900 border-zinc-800 shadow-xl overflow-hidden rounded-3xl">
+        <CardHeader className="border-b border-zinc-800 py-3">
+          <CardTitle className="text-white uppercase text-[10px] tracking-widest font-black text-center opacity-50">Rundensteuerung</CardTitle>
+        </CardHeader>
         <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row gap-4 items-center">
-            <div className="flex-1 text-center md:text-left">
-              <p className="text-zinc-500 text-[8px] uppercase font-black tracking-widest">Aktueller Spieler</p>
-              <h3 className="text-2xl font-black text-white uppercase italic tracking-tighter">{currentPlayer?.name}</h3>
-              <div className="flex items-center justify-center md:justify-start gap-3 mt-1">
-                <span className="text-lg flex gap-1">
-                  {"❤️".repeat(hol.playerLives[currentPlayer?.id || ""] || 0)}
-                  {"🖤".repeat(Math.max(0, 2 - (hol.playerLives[currentPlayer?.id || ""] || 0)))}
-                </span>
-                <div className="flex items-baseline gap-1 bg-zinc-800 px-2 py-0.5 rounded-full border border-zinc-700">
-                  <span className="font-mono font-black italic text-white text-md">{currentPlayer?.currentModeScore || 0}</span>
-                  <span className="text-[7px] font-bold text-zinc-500 uppercase">PKT</span>
-                </div>
-              </div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-zinc-500 text-[10px] uppercase font-black tracking-widest">Am Zug:</span>
+              <span className="text-white font-black uppercase italic tracking-tight text-lg">{currentPlayer?.name}</span>
+              <span className="text-md flex gap-0.5">
+                {"❤️".repeat(hol.playerLives[currentPlayer?.id || ""] || 0)}
+                {"🖤".repeat(Math.max(0, 2 - (hol.playerLives[currentPlayer?.id || ""] || 0)))}
+              </span>
             </div>
-
-            <div className="w-full md:w-auto flex flex-col gap-2">
-              <Button
-                variant="outline"
-                className="border-2 border-zinc-700 text-white h-10 font-black uppercase italic w-full text-xs"
-                onClick={handleNextPlayer}
-              >
-                Nächster Spieler
-              </Button>
-            </div>
+            <Button
+              size="lg"
+              className="bg-blue-600 hover:bg-blue-500 text-white h-12 font-black uppercase italic shadow-lg rounded-xl px-8"
+              onClick={handleNextPlayer}
+            >
+              Nächster Spieler →
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -158,15 +146,15 @@ export default function AdminHigherLower() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <div className="flex flex-wrap gap-2 mb-6">
+          <div className="flex flex-wrap gap-2 mb-6 justify-center">
             {correctOrder.map((item, index) => {
               const isRevealed = currentRound.placedItems.some(i => i.id === item.id);
               return (
                 <div
                   key={item.id}
                   className={`px-3 py-1.5 rounded-lg text-[10px] font-black flex items-center gap-2 border transition-all shadow-sm ${
-                    isRevealed 
-                      ? "bg-green-600 border-green-500 text-white" 
+                    isRevealed
+                      ? "bg-green-600 border-green-500 text-white"
                       : "bg-zinc-900 border-zinc-800 text-zinc-600"
                   }`}
                 >

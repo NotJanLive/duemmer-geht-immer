@@ -5,10 +5,12 @@ import { useGameStore } from "@/lib/gameStore";
 import { getSocket } from "@/lib/socket";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 export default function PlayerJeopardy() {
   const { gameState, playerId } = useGameStore();
   const [buzzerPressed, setBuzzerPressed] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(true);
 
   const jeo = gameState?.jeopardy;
   const me = gameState?.players.find(p => p.id === playerId);
@@ -48,21 +50,8 @@ export default function PlayerJeopardy() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header Info */}
-      <div className="bg-zinc-900/50 p-4 rounded-3xl border border-zinc-800 shadow-xl backdrop-blur-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter leading-none">Jeopardy</h2>
-          </div>
-          <div className="text-right">
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-black text-white italic">{me?.currentModeScore || 0}</span>
-              <span className="text-[10px] font-bold text-zinc-500 uppercase">PKT</span>
-            </div>
-          </div>
-        </div>
-      </div>
+    <>
+      <div className="max-w-4xl mx-auto space-y-6">
 
       {/* Status Banner */}
       {!jeo.currentQuestion ? (
@@ -154,7 +143,7 @@ export default function PlayerJeopardy() {
               {jeo.categories.map((category, ci) => (
                 <div
                   key={`cat-${ci}`}
-                  className="p-3 bg-blue-950 border border-blue-900 text-white text-center text-xs font-black uppercase tracking-tighter rounded-xl flex items-center justify-center min-h-[60px] leading-tight"
+                  className="p-2 bg-blue-950 border border-blue-900 text-white text-center text-[9px] sm:text-xs font-black uppercase tracking-tighter rounded-xl flex items-center justify-center min-h-[50px] sm:min-h-[60px] leading-tight break-words hyphens-auto"
                 >
                   {category.name}
                 </div>
@@ -184,6 +173,121 @@ export default function PlayerJeopardy() {
           </CardContent>
         </Card>
       )}
-    </div>
+      </div>
+
+      {/* Slide-in Panel - Desktop Only */}
+      <div
+        className={`hidden lg:block fixed right-0 top-1/2 -translate-y-1/2 w-80 bg-zinc-900/95 border-2 border-zinc-800 shadow-2xl backdrop-blur-md z-40 transition-transform duration-300 ease-in-out rounded-l-3xl ${
+          leaderboardOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        <div className="overflow-y-auto p-6">
+          <div className="flex items-center justify-between mb-6">
+            <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.4em] italic opacity-50">Live Rundenstand</p>
+            <Button
+              onClick={() => setLeaderboardOpen(false)}
+              variant="ghost"
+              className="h-8 w-8 p-0 hover:bg-zinc-800 rounded-full"
+            >
+              <span className="text-zinc-400">✕</span>
+            </Button>
+          </div>
+          <div className="space-y-3">
+            {[...gameState.players]
+              .sort((a, b) => b.currentModeScore - a.currentModeScore)
+              .map((p, index) => {
+                const isMe = p.id === playerId;
+                const isCurrent = currentPlayer?.id === p.id;
+
+                return (
+                  <div
+                    key={p.id}
+                    className="w-full flex flex-col p-3 rounded-2xl transition-all border border-white/5 bg-black/20"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4 text-left">
+                        <span className={`text-xs font-black italic ${index === 0 ? "text-yellow-500" : "text-zinc-700"}`}>#{index + 1}</span>
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-black uppercase tracking-tight truncate max-w-[120px] ${isMe ? "text-white" : "text-zinc-400"}`}>
+                              {p.name}
+                            </span>
+                            {isCurrent && (
+                              <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)] animate-pulse" />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className={`text-xl font-black italic tracking-tighter ${isMe ? "text-white" : "text-zinc-500"}`}>
+                          {p.currentModeScore}
+                        </span>
+                        <span className="text-[10px] font-bold uppercase text-zinc-700">PKT</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+
+        {/* Toggle Button - Attached to Panel */}
+        <button
+          onClick={() => setLeaderboardOpen(!leaderboardOpen)}
+          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full h-28 w-14 bg-zinc-900 border-2 border-r-0 border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 rounded-l-3xl rounded-r-none shadow-2xl flex flex-col items-center justify-center gap-2 p-0 transition-colors cursor-pointer"
+        >
+          <span className="text-white text-2xl font-black">
+            {leaderboardOpen ? '→' : '←'}
+          </span>
+          <span className="text-[10px] text-zinc-400 font-black uppercase [writing-mode:vertical-lr] rotate-180 tracking-wider">
+            Punkte
+          </span>
+        </button>
+      </div>
+
+      {/* Mobile - Bottom Leaderboard */}
+      <div className="lg:hidden mt-16">
+        <div className="bg-zinc-900/80 border border-zinc-800 rounded-3xl p-6 shadow-[0_0_50px_rgba(0,0,0,0.5)] backdrop-blur-md">
+          <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.4em] mb-6 text-center italic opacity-50">Live Rundenstand</p>
+          <div className="space-y-3">
+            {[...gameState.players]
+              .sort((a, b) => b.currentModeScore - a.currentModeScore)
+              .map((p, index) => {
+                const isMe = p.id === playerId;
+                const isCurrent = currentPlayer?.id === p.id;
+
+                return (
+                  <div
+                    key={p.id}
+                    className="w-full flex flex-col p-3 rounded-2xl transition-all border border-white/5 bg-black/20"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4 text-left">
+                        <span className={`text-xs font-black italic ${index === 0 ? "text-yellow-500" : "text-zinc-700"}`}>#{index + 1}</span>
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-black uppercase tracking-tight ${isMe ? "text-white" : "text-zinc-400"}`}>
+                              {p.name}
+                            </span>
+                            {isCurrent && (
+                              <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)] animate-pulse" />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className={`text-xl font-black italic tracking-tighter ${isMe ? "text-white" : "text-zinc-500"}`}>
+                          {p.currentModeScore}
+                        </span>
+                        <span className="text-[10px] font-bold uppercase text-zinc-700">PKT</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }

@@ -114,6 +114,7 @@ export type GamePhase = 'waiting' | 'playing' | 'results' | 'transition';
 export interface GameState {
   roomCode: string;
   adminId: string;
+  adminName?: string;
   players: Player[];
   currentMode: GameMode;
   phase: GamePhase;
