@@ -9,7 +9,7 @@ steps:
       - npm ci
       - npm run build
       - npm run build:server
-      - mkdir deploy
+      - mkdir -p deploy
       - cp -rv .next deploy/
       - cp -rv public deploy/
       - cp -rv dist deploy/
@@ -18,36 +18,22 @@ steps:
       - cp next.config.ts deploy/
       - cd deploy && npm ci --omit=dev
 
-  - name: Upload
-    image: appleboy/drone-scp
-    settings:
-      host:
-        from_secret: address
-      username: root
-      password:
-        from_secret: ssh_password
-      source: deploy/
-      target: /var/lib/docker/volumes/duemmer_geht_immer/_data
-      strip_components: 1
-
   - name: Deploy
-    image: appleboy/drone-ssh
-    settings:
-      host:
-        from_secret: address
-      username: root
-      password:
-        from_secret: ssh_password
-      script:
-        - docker stop duemmer_geht_immer || true
-        - docker rm duemmer_geht_immer || true
-        - |
-          docker run -d \
-            --name duemmer_geht_immer \
-            --restart always \
-            -p 780:3000 \
-            -p 7553:3000 \
-            -e NODE_ENV=production \
-            -v duemmer_geht_immer:/app \
-            -w /app \
-            node:20-alpine node dist/server.js
+    image: docker:27-cli
+    commands:
+      - docker ps
+      - docker volume create duemmer_geht_immer
+      - docker run --rm -v duemmer_geht_immer:/target alpine sh -c "rm -rf /target/*"
+      - tar -C deploy -cf - . | docker run --rm -i -v duemmer_geht_immer:/target alpine sh -c "tar -C /target -xf -"
+      - docker stop duemmer_geht_immer || true
+      - docker rm duemmer_geht_immer || true
+      - |
+        docker run -d \
+          --name duemmer_geht_immer \
+          --restart always \
+          -p 780:3000 \
+          -p 7553:3000 \
+          -e NODE_ENV=production \
+          -v duemmer_geht_immer:/app \
+          -w /app \
+          node:20-alpine node dist/server.js
