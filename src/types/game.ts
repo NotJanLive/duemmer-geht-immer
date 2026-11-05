@@ -1,200 +1,197 @@
-// Game Types for "Dümmer geht Immer"
+// Shared types for server and client of "Dümmer geht Immer"
+
+export type Mode = 'lastManStanding' | 'millionaire' | 'higherLower' | 'jeopardy';
+export type Screen = 'lobby' | Mode | 'leaderboard' | 'finale';
+export type Role = 'host' | 'player';
+
+export const MODE_ORDER: Mode[] = ['lastManStanding', 'millionaire', 'higherLower', 'jeopardy'];
+
+export const SCREEN_LABELS: Record<Screen, string> = {
+  lobby: 'Lobby',
+  lastManStanding: 'Last Man Standing',
+  millionaire: 'Wer wird Millionär?',
+  higherLower: 'Higher or Lower',
+  jeopardy: 'Jeopardy',
+  leaderboard: 'Punktestand',
+  finale: 'Finale',
+};
+
+export const HOL_MAX_LIVES = 2;
 
 export interface Player {
   id: string;
   name: string;
-  sessionId: string;
   connected: boolean;
   totalScore: number;
-  currentModeScore: number;
-  // Last Man Standing
-  lmsEliminated: boolean;
-  // Higher or Lower
-  holLives: number;
-  // Jeopardy
-  canBuzz: boolean;
-  hasBuzzed: boolean;
+  modeScore: number;
 }
 
-export interface Card {
+// Last Man Standing
+
+export interface LmsCard {
   id: string;
-  value: string;
+  value: string; // empty for players until revealed
   revealed: boolean;
-  revealedBy?: string;
 }
 
-export interface LastManStandingRound {
+export interface LmsRound {
   topic: string;
-  cards: Card[];
-  currentPlayerIndex: number;
-  eliminatedPlayers: string[];
-  roundComplete: boolean;
+  cards: LmsCard[];
+  currentPlayerId: string | null;
+  eliminated: string[]; // player ids in elimination order
+  awarded: Record<string, number>; // points this round has added to modeScore
+  scored: boolean; // survivors have been paid out
 }
 
-export interface LastManStandingState {
-  currentRound: number;
-  totalRounds: number;
-  rounds: LastManStandingRound[];
-  roundScores: Record<string, number>;
+export interface LmsState {
+  roundIndex: number;
+  rounds: LmsRound[];
 }
 
-export interface MillionaireQuestion {
+// Wer wird Millionär
+
+export interface WwmQuestion {
   id: string;
   question: string;
   options: string[];
-  correctAnswer: number;
+  correctAnswer: number; // -1 for players until revealed
   points: number;
-  difficulty: number;
 }
 
-export interface MillionaireState {
-  currentQuestionIndex: number;
-  questions: MillionaireQuestion[];
-  playerAnswers: Record<string, { answer: number | null; confirmed: boolean; correct?: boolean }>;
-  showingResults: boolean;
-  timeRemaining: number;
+export interface WwmAnswer {
+  answer: number | null; // null for other players until revealed
+  locked: boolean;
+  correct?: boolean;
 }
 
-export interface HigherLowerItem {
+export interface WwmState {
+  index: number;
+  total: number;
+  question: WwmQuestion;
+  answers: Record<string, WwmAnswer>;
+  revealed: boolean;
+}
+
+// Higher or Lower
+
+export interface HolItem {
   id: string;
   label: string;
-  value: number;
-  revealed: boolean;
-  position?: number;
-  isInitial?: boolean;
+  value: number | null; // null for players until placed
+  placed: boolean;
+  initial: boolean;
 }
 
-export interface HigherLowerRound {
+export interface HolRound {
   topic: string;
   unit: string;
-  items: HigherLowerItem[];
-  placedItems: HigherLowerItem[];
-  currentPlayerIndex: number;
-  currentItem?: HigherLowerItem;
+  items: HolItem[];
+  currentPlayerId: string | null;
 }
 
-export interface HigherLowerState {
-  currentRound: number;
-  totalRounds: number;
-  rounds: HigherLowerRound[];
-  playerLives: Record<string, number>;
-  roundScores: Record<string, number>;
+export interface HolState {
+  roundIndex: number;
+  rounds: HolRound[];
+  lives: Record<string, number>;
 }
 
-export interface JeopardyCategory {
-  name: string;
-  questions: JeopardyQuestion[];
-}
+// Jeopardy
 
-export interface JeopardyQuestion {
+export interface JeoQuestion {
   id: string;
-  question: string;
-  answer: string;
+  question: string | null; // null for players while unplayed
+  answer: string | null; // null for players while unplayed or active
   points: number;
-  originalPoints?: number;
-  revealed: boolean;
-  discarded?: boolean;
+  status: 'open' | 'answered' | 'discarded';
   answeredBy?: string;
 }
 
-export interface JeopardyState {
-  categories: JeopardyCategory[];
-  currentQuestion: JeopardyQuestion | null;
-  currentPlayerIndex: number;
-  buzzerOpen: boolean;
-  buzzedPlayer: string | null;
-  waitingForAnswer: boolean;
-  openForAll: boolean;
+export interface JeoCategory {
+  name: string;
+  questions: JeoQuestion[];
 }
 
-export type GameMode = 'lobby' | 'lastManStanding' | 'millionaire' | 'higherLower' | 'jeopardy' | 'leaderboard' | 'finale';
+export interface JeoActive {
+  categoryIndex: number;
+  questionIndex: number;
+  points: number; // halved after the chooser answers wrong
+  originalPoints: number;
+  answeringId: string | null;
+  buzzerOpen: boolean;
+  tried: string[];
+  firstAttempt: boolean; // chooser answers without buzzer
+}
 
-export type GamePhase = 'waiting' | 'playing' | 'results' | 'transition';
+export interface JeoState {
+  categories: JeoCategory[];
+  chooserId: string | null;
+  active: JeoActive | null;
+}
 
 export interface GameState {
   roomCode: string;
-  adminId: string;
-  adminName?: string;
+  hostName: string;
+  hostConnected: boolean;
+  screen: Screen;
+  modeIndex: number; // index into MODE_ORDER of the current or last played mode
   players: Player[];
-  currentMode: GameMode;
-  phase: GamePhase;
-  modeIndex: number;
-  
-  // Mode-specific states
-  lastManStanding: LastManStandingState | null;
-  millionaire: MillionaireState | null;
-  higherLower: HigherLowerState | null;
-  jeopardy: JeopardyState | null;
-  
-  // Finale
-  finaleRevealed: string[];
-  finaleStartTime: number | null;
-  
-  // Timestamps
-  createdAt: number;
-  updatedAt: number;
+  lms: LmsState | null;
+  wwm: WwmState | null;
+  hol: HolState | null;
+  jeo: JeoState | null;
+  finaleStartedAt: number | null;
+  serverTime: number;
 }
 
-export interface Room {
-  code: string;
-  gameState: GameState;
-  sessions: Map<string, string>; // sessionId -> playerId
+export type HostAction =
+  | { type: 'start' }
+  | { type: 'kick'; playerId: string }
+  | { type: 'showLeaderboard' }
+  | { type: 'nextMode' }
+  | { type: 'closeRoom' }
+  | { type: 'finale.start' }
+  | { type: 'lms.reveal'; cardId: string }
+  | { type: 'lms.toggleEliminated'; playerId: string }
+  | { type: 'lms.skip' }
+  | { type: 'lms.nextRound' }
+  | { type: 'wwm.reveal' }
+  | { type: 'wwm.next' }
+  | { type: 'hol.place'; itemId: string }
+  | { type: 'hol.unplace'; itemId: string }
+  | { type: 'hol.lives'; playerId: string; delta: number }
+  | { type: 'hol.points'; playerId: string; delta: number }
+  | { type: 'hol.nextPlayer' }
+  | { type: 'hol.nextRound' }
+  | { type: 'jeo.select'; categoryIndex: number; questionIndex: number }
+  | { type: 'jeo.judge'; correct: boolean }
+  | { type: 'jeo.buzzer'; open: boolean }
+  | { type: 'jeo.resetBuzzer' }
+  | { type: 'jeo.discard' };
+
+export type PlayerAction =
+  | { type: 'wwm.select'; answer: number }
+  | { type: 'wwm.lock' }
+  | { type: 'jeo.buzz' };
+
+export interface SessionReply {
+  ok: boolean;
+  error?: string;
+  roomCode?: string;
+  sessionId?: string;
+  role?: Role;
+  playerId?: string;
 }
 
-// Socket Events
 export interface ServerToClientEvents {
-  gameState: (state: GameState) => void;
-  playerJoined: (player: Player) => void;
-  playerLeft: (playerId: string) => void;
-  playerReconnected: (playerId: string) => void;
-  buzzerPressed: (playerId: string) => void;
-  finaleAnimationStarted: () => void;
-  timerUpdate: (time: number) => void;
-  error: (message: string) => void;
+  state: (state: GameState) => void;
+  closed: (message: string) => void;
 }
 
 export interface ClientToServerEvents {
-  createRoom: (adminName: string, callback: (response: { success: boolean; roomCode?: string; sessionId?: string; error?: string }) => void) => void;
-  joinRoom: (roomCode: string, playerName: string, sessionId: string, callback: (response: { success: boolean; playerId?: string; error?: string }) => void) => void;
-  rejoinRoom: (roomCode: string, sessionId: string, callback: (response: { success: boolean; playerId?: string; gameState?: GameState; error?: string }) => void) => void;
-  
-  // Admin actions
-  startGame: () => void;
-  nextStep: () => void;
-  previousStep: () => void;
-  showLeaderboard: () => void;
-  startFinale: () => void;
-  startFinaleAnimation: () => void;
-  closeRoom: () => void;
-  revealNextFinalist: () => void;
-  
-  // LMS actions
-  revealCard: (cardId: string) => void;
-  eliminatePlayer: (playerId: string) => void;
-  nextLmsRound: () => void;
-  
-  // Millionaire actions
-  submitAnswer: (questionId: string, answer: number) => void;
-  confirmAnswer: () => void;
-  showMillionaireResults: () => void;
-  nextQuestion: () => void;
-  
-  // Higher Lower actions
-  holPlaceItem: (itemId: string, position?: number) => void;
-  holRemoveItem: (itemId: string) => void;
-  holTakeLife: (playerId: string) => void;
-  holAddLife: (playerId: string) => void;
-  holNextPlayer: () => void;
-  holAwardPoints: (playerId: string, points: number) => void;
-  holRemovePoints: (playerId: string, points: number) => void;
-  holNextRound: () => void;
-  
-  // Jeopardy actions
-  selectCategory: (categoryIndex: number, questionIndex: number) => void;
-  openBuzzer: () => void;
-  closeBuzzer: () => void;
-  buzz: () => void;
-  answerCorrect: (correct: boolean) => void;
-  jeopardyDiscard: () => void;
-  jeopardyResetBuzzer: () => void;
+  createRoom: (hostName: string, reply: (r: SessionReply) => void) => void;
+  joinRoom: (roomCode: string, name: string, sessionId: string | null, reply: (r: SessionReply) => void) => void;
+  resume: (roomCode: string, sessionId: string, reply: (r: SessionReply) => void) => void;
+  leaveRoom: () => void;
+  host: (action: HostAction) => void;
+  player: (action: PlayerAction) => void;
 }

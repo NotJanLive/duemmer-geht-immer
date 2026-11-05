@@ -1,52 +1,44 @@
 import { io, Socket } from 'socket.io-client';
-import { ClientToServerEvents, ServerToClientEvents } from '@/types/game';
+import { ClientToServerEvents, HostAction, PlayerAction, ServerToClientEvents } from '@/types/game';
 
-let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
+export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
-export const getSocket = (): Socket<ServerToClientEvents, ClientToServerEvents> => {
+let socket: GameSocket | null = null;
+
+export function getSocket(): GameSocket {
   if (!socket) {
     socket = io({
       autoConnect: false,
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      transports: ['websocket'], // Force websocket for minimum latency
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 3000,
+      // A hanging attempt would otherwise block the next retry for 20 s.
+      timeout: 5000,
+      transports: ['websocket', 'polling'],
     });
   }
   return socket;
-};
+}
 
-export const connectSocket = (): Promise<void> => {
+export function connectSocket(timeout = 8000): Promise<GameSocket> {
+  const s = getSocket();
+  if (s.connected) return Promise.resolve(s);
   return new Promise((resolve, reject) => {
-    const s = getSocket();
-    
-    if (s.connected) {
-      resolve();
-      return;
-    }
-    
-    const timeout = setTimeout(() => {
-      reject(new Error('Connection timeout'));
-    }, 10000);
-    
-    s.once('connect', () => {
-      clearTimeout(timeout);
-      resolve();
-    });
-    
-    s.once('connect_error', (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-    
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('timeout'));
+    }, timeout);
+    const onConnect = () => {
+      cleanup();
+      resolve(s);
+    };
+    const cleanup = () => {
+      clearTimeout(timer);
+      s.off('connect', onConnect);
+    };
+    s.on('connect', onConnect);
     s.connect();
   });
-};
+}
 
-export const disconnectSocket = () => {
-  if (socket) {
-    socket.disconnect();
-    socket = null;
-  }
-};
+export const hostAction = (action: HostAction) => getSocket().emit('host', action);
+export const playerAction = (action: PlayerAction) => getSocket().emit('player', action);

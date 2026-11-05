@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dümmer geht Immer
 
-## Getting Started
+Eine Quizshow für Freunde. Eine Person moderiert, alle anderen spielen am eigenen Handy oder Rechner mit. Die Spiele laufen in dieser Reihenfolge:
 
-First, run the development server:
+1. **Last Man Standing**: Reihum Begriffe zu einem Thema nennen. Wer nichts mehr weiß, scheidet aus.
+2. **Wer wird Millionär?**: Multiple Choice. Spätere Fragen bringen mehr Punkte.
+3. **Higher or Lower**: Begriffe auf einer Skala richtig einordnen. Jeder hat zwei Leben.
+4. **Jeopardy**: Fragen vom Spielbrett wählen und buzzern.
+
+Nach jedem Spiel gibt es einen Punktestand und am Ende ein animiertes Finale.
+
+## Entwicklung
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Danach läuft das Spiel auf http://localhost:3000. Um es von einem anderen Gerät im Netzwerk zu öffnen, die Adresse in `ALLOWED_DEV_ORIGINS` eintragen:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+ALLOWED_DEV_ORIGINS=192.168.1.20 npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Produktion
 
-## Learn More
+```bash
+npm run build
+npm start
+```
 
-To learn more about Next.js, take a look at the following resources:
+`PORT` legt den Port fest (Standard 3000). Alle Räume liegen im Speicher. Ein Neustart beendet also laufende Spiele.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Fragen
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Alle Fragen stehen in `src/lib/gameData.ts`:
 
-## Deploy on Vercel
+- `lmsData`: Themen mit einer Liste von Begriffen.
+- `millionaireData`: Frage `q`, Antworten `o` und Index der richtigen Antwort `a`.
+- `higherLowerData`: Themen mit Einheit und Begriffen samt Zahlenwert.
+- `jeopardyData`: Kategorien mit Frage `q` und Antwort `a`. Die Punkte steigen pro Zeile um 10.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Aufbau
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `server.ts` startet Next.js und Socket.IO.
+- `server/game.ts` enthält die Spielregeln, `server/rooms.ts` Räume, Sitzungen und die gefilterte Sicht für Spieler.
+- `src/app` und `src/components` sind die Oberfläche. Host und Spieler nutzen dieselben Komponenten.

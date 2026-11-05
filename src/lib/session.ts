@@ -1,80 +1,42 @@
-import { v4 as uuidv4 } from 'uuid';
+import { Role } from '@/types/game';
 
-const SESSION_KEY = 'dgi_session_id';
-const ROOM_KEY = 'dgi_room_code';
-const PLAYER_NAME_KEY = 'dgi_player_name';
-const PLAYER_ID_KEY = 'dgi_player_id';
-const IS_ADMIN_KEY = 'dgi_is_admin';
+export interface StoredSession {
+  roomCode: string;
+  sessionId: string;
+  role: Role;
+  name: string;
+}
 
-export const getSessionId = (): string => {
-  if (typeof window === 'undefined') return '';
-  
-  let sessionId = localStorage.getItem(SESSION_KEY);
-  if (!sessionId) {
-    sessionId = uuidv4();
-    localStorage.setItem(SESSION_KEY, sessionId);
+const KEY = 'dgi_session';
+
+// Storage can throw in private mode, so every access is guarded.
+export function loadSession(): StoredSession | null {
+  try {
+    const raw = localStorage.getItem(KEY);
+    return raw ? (JSON.parse(raw) as StoredSession) : null;
+  } catch {
+    return null;
   }
-  return sessionId;
-};
+}
 
-export const setSessionId = (id: string) => {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(SESSION_KEY, id);
-};
+export function saveSession(session: StoredSession) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(session));
+  } catch {}
+}
 
-export const getStoredRoomCode = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(ROOM_KEY);
-};
+export function clearSession() {
+  try {
+    localStorage.removeItem(KEY);
+  } catch {}
+}
 
-export const setStoredRoomCode = (code: string | null) => {
-  if (typeof window === 'undefined') return;
-  if (code) {
-    localStorage.setItem(ROOM_KEY, code);
-  } else {
-    localStorage.removeItem(ROOM_KEY);
-  }
-};
+// Keeps the player's seat if they join again from the same browser.
+export function sessionIdFor(roomCode: string): string | null {
+  const s = loadSession();
+  return s && s.roomCode === roomCode ? s.sessionId : null;
+}
 
-export const getStoredPlayerName = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(PLAYER_NAME_KEY);
-};
-
-export const setStoredPlayerName = (name: string) => {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(PLAYER_NAME_KEY, name);
-};
-
-export const getStoredPlayerId = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(PLAYER_ID_KEY);
-};
-
-export const setStoredPlayerId = (id: string | null) => {
-  if (typeof window === 'undefined') return;
-  if (id) {
-    localStorage.setItem(PLAYER_ID_KEY, id);
-  } else {
-    localStorage.removeItem(PLAYER_ID_KEY);
-  }
-};
-
-export const getStoredIsAdmin = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  return localStorage.getItem(IS_ADMIN_KEY) === 'true';
-};
-
-export const setStoredIsAdmin = (isAdmin: boolean) => {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(IS_ADMIN_KEY, isAdmin ? 'true' : 'false');
-};
-
-export const clearSession = () => {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(ROOM_KEY);
-  localStorage.removeItem(PLAYER_NAME_KEY);
-  localStorage.removeItem(PLAYER_ID_KEY);
-  localStorage.removeItem(IS_ADMIN_KEY);
-  // Keep session ID for potential reconnects
-};
+export function lastName(): string {
+  return loadSession()?.name ?? '';
+}
