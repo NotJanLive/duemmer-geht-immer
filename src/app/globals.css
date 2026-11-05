@@ -101,12 +101,26 @@
   color: transparent;
 }
 
-/* Mode titles, as in the original design. */
-@utility gradient-text {
-  background: linear-gradient(to right, #60a5fa, #c084fc, #f472b6);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+/* Card flip for Last Man Standing, as in the original design. */
+@utility flip-scene {
+  perspective: 1000px;
+}
+@utility flip-card {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.7s;
+}
+@utility flip-flipped {
+  transform: rotateY(180deg);
+}
+@utility flip-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+@utility flip-back {
+  transform: rotateY(180deg);
 }
 
 @utility headline {

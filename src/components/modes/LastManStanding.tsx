@@ -92,14 +92,13 @@ export default function LastManStanding() {
                 {card.value}
               </button>
             ) : (
-              <div
-                key={card.id}
-                className={cn(
-                  "grid min-h-14 place-items-center rounded-xl border-2 px-2 py-2 text-center text-sm font-bold uppercase italic transition-colors sm:text-base",
-                  card.revealed ? "animate-pop border-green-500 bg-green-600 text-white" : "border-line-strong bg-raised text-2xl text-faint",
-                )}
-              >
-                {card.revealed ? card.value : "?"}
+              <div key={card.id} className="flip-scene h-16 sm:h-20">
+                <div className={cn("flip-card h-full w-full", card.revealed && "flip-flipped")}>
+                  <div className="flip-face grid place-items-center rounded-xl border-2 border-line-strong bg-raised text-2xl font-black italic text-faint">?</div>
+                  <div className="flip-face flip-back grid place-items-center rounded-xl border border-green-400 bg-green-600 px-1.5 text-center text-sm font-bold uppercase italic leading-tight text-white shadow-[0_0_30px_rgba(34,197,94,0.2)] sm:text-base">
+                    {card.value}
+                  </div>
+                </div>
               </div>
             ),
           )}

@@ -18,7 +18,7 @@ export function TopBar() {
     <header className="sticky top-0 z-30 border-b border-line bg-black/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
         <div className="min-w-0 flex-1">
-          <p className="headline gradient-text truncate pr-1 text-xl sm:text-2xl">{SCREEN_LABELS[state.screen]}</p>
+          <p className="headline truncate pr-1 text-xl sm:text-2xl">{SCREEN_LABELS[state.screen]}</p>
           <p className="truncate text-xs font-semibold text-muted">Dümmer geht Immer</p>
         </div>
         {role === "host" ? (
