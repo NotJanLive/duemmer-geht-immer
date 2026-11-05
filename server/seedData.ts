@@ -1,4 +1,5 @@
-// Game Content for "Dümmer geht Immer"
+// Starter content. Copied into the pool the first time the server starts
+// without a pool file. After that the pool is edited on /admin.
 
 export const lmsData = [
   {
@@ -180,4 +181,34 @@ export const jeopardyData = [
       { q: 'Welches Gewürz macht Essen scharf?', a: 'Chili / Capsaicin' },
     ]
   }
+];
+
+export const geoData = [
+  {
+    name: 'Deutsche Städte',
+    map: 'de' as const,
+    minKm: 400,
+    places: [
+      { name: 'Berlin', lat: 52.52, lng: 13.405 },
+      { name: 'Hamburg', lat: 53.551, lng: 9.993 },
+      { name: 'München', lat: 48.137, lng: 11.575 },
+      { name: 'Köln', lat: 50.938, lng: 6.96 },
+      { name: 'Frankfurt am Main', lat: 50.11, lng: 8.682 },
+      { name: 'Stuttgart', lat: 48.776, lng: 9.183 },
+      { name: 'Düsseldorf', lat: 51.227, lng: 6.774 },
+      { name: 'Leipzig', lat: 51.34, lng: 12.375 },
+      { name: 'Dresden', lat: 51.05, lng: 13.738 },
+      { name: 'Bremen', lat: 53.079, lng: 8.802 },
+      { name: 'Hannover', lat: 52.376, lng: 9.732 },
+      { name: 'Nürnberg', lat: 49.452, lng: 11.077 },
+      { name: 'Kiel', lat: 54.323, lng: 10.123 },
+      { name: 'Rostock', lat: 54.092, lng: 12.099 },
+      { name: 'Freiburg im Breisgau', lat: 47.999, lng: 7.842 },
+      { name: 'Erfurt', lat: 50.978, lng: 11.029 },
+      { name: 'Saarbrücken', lat: 49.234, lng: 6.997 },
+      { name: 'Passau', lat: 48.575, lng: 13.461 },
+      { name: 'Flensburg', lat: 54.794, lng: 9.446 },
+      { name: 'Görlitz', lat: 51.152, lng: 14.987 },
+    ],
+  },
 ];

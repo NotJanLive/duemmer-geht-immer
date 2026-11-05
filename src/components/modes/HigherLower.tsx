@@ -9,7 +9,6 @@ import { HOL_MAX_LIVES } from "@/types/game";
 import { Button, Panel, PanelTitle, Pill } from "@/components/ui";
 import { ModeHeading, ModeLayout, Scoreboard, StatusBanner } from "@/components/room/Shell";
 
-const POINTS_STEP = 10;
 
 function Lives({ count }: { count: number }) {
   return (
@@ -74,11 +73,11 @@ export default function HigherLower() {
                     <Button size="sm" variant="secondary" className="px-2" title="Leben zurückgeben" onClick={() => hostAction({ type: "hol.lives", playerId: p.id, delta: 1 })} disabled={lives(p.id) === HOL_MAX_LIVES}>
                       <Plus /><Heart />
                     </Button>
-                    <Button size="sm" variant="secondary" className="px-2.5" onClick={() => hostAction({ type: "hol.points", playerId: p.id, delta: -POINTS_STEP })}>
-                      −{POINTS_STEP}
+                    <Button size="sm" variant="secondary" className="px-2.5" onClick={() => hostAction({ type: "hol.points", playerId: p.id, delta: -hol.points })}>
+                      −{hol.points}
                     </Button>
-                    <Button size="sm" variant="good" className="px-2.5" onClick={() => hostAction({ type: "hol.points", playerId: p.id, delta: POINTS_STEP })}>
-                      +{POINTS_STEP}
+                    <Button size="sm" variant="good" className="px-2.5" onClick={() => hostAction({ type: "hol.points", playerId: p.id, delta: hol.points })}>
+                      +{hol.points}
                     </Button>
                   </>
                 )

@@ -3,6 +3,9 @@ import next from 'next';
 import { Server, Socket } from 'socket.io';
 import { ClientToServerEvents, Role, ServerToClientEvents } from './src/types/game';
 import { applyHostAction, applyPlayerAction } from './server/game';
+import { handleAdmin, isAdminRequest } from './server/admin';
+import { isMediaRequest, serveMedia } from './server/media';
+import { getPool } from './server/pool';
 import {
   Room,
   attachPlayerSocket,
@@ -13,6 +16,7 @@ import {
   isRoomIdle,
   joinRoom,
   normalizeCode,
+  needsPersonalView,
   personalView,
   playerView,
   removePlayer,
@@ -40,7 +44,7 @@ function broadcast(io: GameServer, room: Room) {
   io.to(hostChannel(room.code)).emit('state', full);
 
   const base = playerView(room, full);
-  if (base.wwm && !base.wwm.revealed) {
+  if (needsPersonalView(base)) {
     for (const [playerId, sockets] of room.playerSockets) {
       const view = personalView(base, playerId, full);
       for (const id of sockets) io.to(id).emit('state', view);
@@ -104,7 +108,22 @@ async function app() {
   await nextApp.prepare();
   const handle = nextApp.getRequestHandler();
 
-  const httpServer = createServer((req, res) => handle(req, res));
+  getPool(); // load or seed the pool before the first game
+
+  const httpServer = createServer((req, res) => {
+    if (isAdminRequest(req.url ?? '')) {
+      handleAdmin(req, res).catch((err) => {
+        console.error('Admin request failed:', err);
+        if (!res.headersSent) res.writeHead(500).end();
+      });
+      return;
+    }
+    if (isMediaRequest(req.url ?? '') && (req.method === 'GET' || req.method === 'HEAD')) {
+      serveMedia(req, res);
+      return;
+    }
+    handle(req, res);
+  });
   const io: GameServer = new Server(httpServer, {
     pingInterval: 10000,
     pingTimeout: 8000,

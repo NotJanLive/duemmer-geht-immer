@@ -1,16 +1,25 @@
 // Shared types for server and client of "Dümmer geht Immer"
 
-export type Mode = 'lastManStanding' | 'millionaire' | 'higherLower' | 'jeopardy';
+import { MapId, PicTier, PictureKind, tierPoints } from './pool';
+
+export type Mode = 'lastManStanding' | 'millionaire' | 'higherLower' | 'geo' | 'pictures' | 'jeopardy';
 export type Screen = 'lobby' | Mode | 'leaderboard' | 'finale';
 export type Role = 'host' | 'player';
 
-export const MODE_ORDER: Mode[] = ['lastManStanding', 'millionaire', 'higherLower', 'jeopardy'];
+export const MODE_ORDER: Mode[] = ['lastManStanding', 'millionaire', 'higherLower', 'geo', 'pictures', 'jeopardy'];
+
+// Jeopardy is always the last mode of a show. The host picks and orders the rest.
+export const FINAL_MODE: Mode = 'jeopardy';
+export const PLANNABLE_MODES: Mode[] = MODE_ORDER.filter((m) => m !== FINAL_MODE);
+export const DEFAULT_PLAN: Mode[] = ['lastManStanding', 'millionaire', 'higherLower', FINAL_MODE];
 
 export const SCREEN_LABELS: Record<Screen, string> = {
   lobby: 'Lobby',
   lastManStanding: 'Last Man Standing',
   millionaire: 'Wer wird Millionär?',
   higherLower: 'Higher or Lower',
+  geo: 'Wo liegt das?',
+  pictures: 'Bildrätsel',
   jeopardy: 'Jeopardy',
   leaderboard: 'Punktestand',
   finale: 'Finale',
@@ -45,6 +54,7 @@ export interface LmsRound {
 
 export interface LmsState {
   roundIndex: number;
+  pointsPerPlace: number;
   rounds: LmsRound[];
 }
 
@@ -91,8 +101,75 @@ export interface HolRound {
 
 export interface HolState {
   roundIndex: number;
+  points: number; // per correct placement
   rounds: HolRound[];
   lives: Record<string, number>;
+}
+
+// Wo liegt das?
+
+export interface GeoGuess {
+  lat: number;
+  lng: number;
+}
+
+export interface GeoResult {
+  distanceKm: number;
+  points: number;
+}
+
+export interface GeoState {
+  category: string;
+  map: MapId;
+  minKm: number;
+  maxPoints: number;
+  index: number;
+  total: number;
+  place: { name: string; image: string | null; lat: number | null; lng: number | null }; // lat/lng null for players until revealed
+  endsAt: number; // server time when pins can no longer be set
+  guesses: Record<string, GeoGuess | null>; // for players: own pin only until revealed, others null (key = has set a pin)
+  revealed: boolean;
+  results: Record<string, GeoResult>;
+}
+
+// Bildrätsel
+
+export interface PicState {
+  category: string;
+  kind: PictureKind;
+  roundIndex: number;
+  roundCount: number;
+  itemIndex: number;
+  itemCount: number;
+  image: string | null; // null for players until started
+  answer: string | null; // null for players until solved
+  seed: number; // tile order and zoom point
+  status: 'ready' | 'running' | 'paused' | 'solved';
+  elapsedMs: number; // running time before runningSince
+  runningSince: number | null; // server time
+  // Everyone who buzzed, in order, with how far the picture was at their buzz.
+  // The first one still waiting answers; a wrong answer hands over to the next.
+  queue: PicBuzz[];
+  answeringId: string | null; // first waiting in the queue
+  winnerId: string | null;
+  awarded: number;
+  tiers: PicTier[];
+  revealSeconds: number;
+}
+
+export interface PicBuzz {
+  playerId: string;
+  progress: number; // 0..1
+  wrong: boolean;
+}
+
+// How far the picture is revealed after `ms` of running time, 0..1.
+export function picProgress(pic: Pick<PicState, 'revealSeconds'>, ms: number): number {
+  return Math.min(1, ms / (pic.revealSeconds * 1000));
+}
+
+export function picPoints(pic: Pick<PicState, 'tiers'>, progress: number): number {
+  return tierPoints(pic.tiers, progress);
 }
 
 // Jeopardy
@@ -133,11 +210,15 @@ export interface GameState {
   hostName: string;
   hostConnected: boolean;
   screen: Screen;
-  modeIndex: number; // index into MODE_ORDER of the current or last played mode
+  plan: Mode[]; // modes of this show in order, always ending with FINAL_MODE
+  modeIndex: number; // index into plan of the current or last played mode
+  poolCounts?: Record<Mode, number>; // host only, entries per mode in the pool
   players: Player[];
   lms: LmsState | null;
   wwm: WwmState | null;
   hol: HolState | null;
+  geo: GeoState | null;
+  pic: PicState | null;
   jeo: JeoState | null;
   finaleStartedAt: number | null;
   serverTime: number;
@@ -146,6 +227,7 @@ export interface GameState {
 export type HostAction =
   | { type: 'start' }
   | { type: 'kick'; playerId: string }
+  | { type: 'plan.set'; modes: Mode[] }
   | { type: 'showLeaderboard' }
   | { type: 'nextMode' }
   | { type: 'closeRoom' }
@@ -162,6 +244,12 @@ export type HostAction =
   | { type: 'hol.points'; playerId: string; delta: number }
   | { type: 'hol.nextPlayer' }
   | { type: 'hol.nextRound' }
+  | { type: 'geo.reveal' }
+  | { type: 'geo.next' }
+  | { type: 'pic.start' }
+  | { type: 'pic.judge'; correct: boolean }
+  | { type: 'pic.solve' }
+  | { type: 'pic.next' }
   | { type: 'jeo.select'; categoryIndex: number; questionIndex: number }
   | { type: 'jeo.judge'; correct: boolean }
   | { type: 'jeo.buzzer'; open: boolean }
@@ -171,6 +259,8 @@ export type HostAction =
 export type PlayerAction =
   | { type: 'wwm.select'; answer: number }
   | { type: 'wwm.lock' }
+  | { type: 'geo.guess'; lat: number; lng: number }
+  | { type: 'pic.buzz' }
   | { type: 'jeo.buzz' };
 
 export interface SessionReply {

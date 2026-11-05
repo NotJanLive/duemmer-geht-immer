@@ -9,6 +9,8 @@ import Lobby from "@/components/modes/Lobby";
 import LastManStanding from "@/components/modes/LastManStanding";
 import Millionaire from "@/components/modes/Millionaire";
 import HigherLower from "@/components/modes/HigherLower";
+import Geo from "@/components/modes/Geo";
+import Pictures from "@/components/modes/Pictures";
 import Jeopardy from "@/components/modes/Jeopardy";
 import Leaderboard from "@/components/modes/Leaderboard";
 import Finale from "@/components/modes/Finale";
@@ -18,6 +20,8 @@ const SCREENS = {
   lastManStanding: LastManStanding,
   millionaire: Millionaire,
   higherLower: HigherLower,
+  geo: Geo,
+  pictures: Pictures,
   jeopardy: Jeopardy,
   leaderboard: Leaderboard,
   finale: Finale,

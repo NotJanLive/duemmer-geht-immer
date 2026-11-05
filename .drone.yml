@@ -20,9 +20,13 @@ steps:
 
   - name: Deploy
     image: docker:27-cli
+    environment:
+      ADMIN_PASSWORD:
+        from_secret: admin_password
     commands:
       - docker ps
       - docker volume create duemmer_geht_immer
+      - docker volume create duemmer_geht_immer_data
       - docker run --rm -v duemmer_geht_immer:/target alpine sh -c "rm -rf /target/*"
       - tar -C deploy -cf - . | docker run --rm -i -v duemmer_geht_immer:/target alpine sh -c "tar -C /target -xf -"
       - docker stop duemmer_geht_immer || true
@@ -34,6 +38,9 @@ steps:
           -p 780:3000 \
           -p 7553:3000 \
           -e NODE_ENV=production \
+          -e DATA_DIR=/data \
+          -e ADMIN_PASSWORD="$ADMIN_PASSWORD" \
           -v duemmer_geht_immer:/app \
+          -v duemmer_geht_immer_data:/data \
           -w /app \
           node:20-alpine node dist/server.js

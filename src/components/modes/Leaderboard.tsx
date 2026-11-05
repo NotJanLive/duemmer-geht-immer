@@ -4,7 +4,7 @@ import { ArrowRight, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGame, useRoomStore } from "@/lib/store";
 import { hostAction } from "@/lib/socket";
-import { MODE_ORDER, SCREEN_LABELS } from "@/types/game";
+import { SCREEN_LABELS } from "@/types/game";
 import { Button, Panel } from "@/components/ui";
 import { ModeHeading, ModeLayout, StatusBanner } from "@/components/room/Shell";
 
@@ -12,8 +12,8 @@ export default function Leaderboard() {
   const game = useGame();
   const role = useRoomStore((s) => s.role);
   const meId = useRoomStore((s) => s.playerId);
-  const playedMode = MODE_ORDER[game.modeIndex];
-  const nextMode = MODE_ORDER[game.modeIndex + 1];
+  const playedMode = game.plan[game.modeIndex];
+  const nextMode = game.plan[game.modeIndex + 1];
   const ranked = [...game.players].sort((a, b) => b.modeScore - a.modeScore || a.name.localeCompare(b.name, "de"));
   const best = ranked[0]?.modeScore ?? 0;
   const rankOf = (score: number) => ranked.findIndex((p) => p.modeScore === score) + 1;

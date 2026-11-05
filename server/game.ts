@@ -1,19 +1,27 @@
 import {
+  DEFAULT_PLAN,
+  FINAL_MODE,
+  GeoGuess,
+  GeoResult,
   HOL_MAX_LIVES,
   HolState,
   HostAction,
   JeoState,
   LmsRound,
   LmsState,
-  MODE_ORDER,
   Mode,
+  PLANNABLE_MODES,
+  PicState,
+  picPoints,
+  picProgress,
   Player,
   PlayerAction,
   Screen,
   WwmAnswer,
   WwmQuestion,
 } from '../src/types/game';
-import { higherLowerData, jeopardyData, lmsData, millionaireData } from '../src/lib/gameData';
+import { getPool, pickGeo, pickJeopardy, pickMillionaire, pickPictures, pickTopics, poolCounts } from './pool';
+import { GeoContent, MapId, PicContent, PictureKind, distanceKm, geoPoints } from '../src/types/pool';
 
 // Millionaire keeps every question on the server and only sends the current one.
 export interface WwmFull {
@@ -23,13 +31,37 @@ export interface WwmFull {
   revealed: boolean;
 }
 
+// Wo liegt das? keeps all places on the server and only sends the current one.
+export interface GeoFull {
+  category: string;
+  map: MapId;
+  minKm: number;
+  maxPoints: number;
+  seconds: number;
+  places: GeoContent['places'];
+  index: number;
+  endsAt: number;
+  guesses: Record<string, GeoGuess>;
+  revealed: boolean;
+  results: Record<string, GeoResult>;
+}
+
+// Bildrätsel keeps every round on the server. `current` is the picture shown.
+export interface PicFull {
+  rounds: { category: string; kind: PictureKind; items: PicContent['items'] }[];
+  current: PicState;
+}
+
 export interface Game {
   screen: Screen;
+  plan: Mode[];
   modeIndex: number;
   players: Player[];
   lms: LmsState | null;
   wwm: WwmFull | null;
   hol: HolState | null;
+  geo: GeoFull | null;
+  pic: PicFull | null;
   jeo: JeoState | null;
   finaleStartedAt: number | null;
 }
@@ -37,11 +69,14 @@ export interface Game {
 export function createGame(): Game {
   return {
     screen: 'lobby',
+    plan: [...DEFAULT_PLAN],
     modeIndex: 0,
     players: [],
     lms: null,
     wwm: null,
     hol: null,
+    geo: null,
+    pic: null,
     jeo: null,
     finaleStartedAt: null,
   };
@@ -78,6 +113,7 @@ function shuffle<T>(items: T[]): T[] {
 // Mode setup
 
 function setupMode(game: Game, mode: Mode) {
+  const settings = getPool().settings;
   const order = turnOrder(game);
   const starter = (round: number) => order[round % Math.max(order.length, 1)]?.id ?? null;
 
@@ -85,7 +121,8 @@ function setupMode(game: Game, mode: Mode) {
     case 'lastManStanding':
       game.lms = {
         roundIndex: 0,
-        rounds: lmsData.map((round, r) => ({
+        pointsPerPlace: settings.lmsPointsPerPlace,
+        rounds: pickTopics('lastManStanding', settings.lmsRounds).map((round, r) => ({
           topic: round.topic,
           cards: round.items.map((value, i) => ({ id: `lms-${r}-${i}`, value, revealed: false })),
           currentPlayerId: starter(r),
@@ -98,12 +135,12 @@ function setupMode(game: Game, mode: Mode) {
     case 'millionaire':
       game.wwm = {
         index: 0,
-        questions: millionaireData.map((q, i) => ({
+        questions: pickMillionaire().map(({ entry, points }, i) => ({
           id: `wwm-${i}`,
-          question: q.q,
-          options: q.o,
-          correctAnswer: q.a,
-          points: Math.floor(i / 2) + 1,
+          question: entry.question,
+          options: entry.options,
+          correctAnswer: entry.answer,
+          points,
         })),
         answers: {},
         revealed: false,
@@ -112,8 +149,9 @@ function setupMode(game: Game, mode: Mode) {
     case 'higherLower':
       game.hol = {
         roundIndex: 0,
+        points: settings.holPoints,
         lives: Object.fromEntries(game.players.map((p) => [p.id, HOL_MAX_LIVES])),
-        rounds: higherLowerData.map((round, r) => {
+        rounds: pickTopics('higherLower', settings.holRounds).map((round, r) => {
           const initial = Math.floor(Math.random() * round.items.length);
           return {
             topic: round.topic,
@@ -132,17 +170,52 @@ function setupMode(game: Game, mode: Mode) {
         }),
       };
       break;
+    case 'geo': {
+      const picked = pickGeo(settings.geoRounds);
+      if (!picked) break;
+      game.geo = {
+        category: picked.category.name,
+        map: picked.category.map,
+        minKm: picked.category.minKm,
+        maxPoints: settings.geoMaxPoints,
+        seconds: settings.geoSeconds,
+        places: picked.places,
+        index: 0,
+        endsAt: Date.now() + settings.geoSeconds * 1000,
+        guesses: {},
+        revealed: false,
+        results: {},
+      };
+      break;
+    }
+    case 'pictures': {
+      const rounds = pickPictures(settings.picRounds, settings.picPerRound).map((r) => ({
+        category: r.category.name,
+        kind: r.category.kind,
+        items: r.items,
+      }));
+      if (!rounds.length) break;
+      game.pic = {
+        rounds,
+        current: {
+          ...picItem(rounds, 0, 0),
+          tiers: settings.picTiers,
+          revealSeconds: settings.picRevealSeconds,
+        },
+      };
+      break;
+    }
     case 'jeopardy':
       game.jeo = {
         chooserId: starter(0),
         active: null,
-        categories: jeopardyData.map((cat, c) => ({
+        categories: pickJeopardy(settings.jeoCategories).map((cat, c) => ({
           name: cat.name,
-          questions: cat.questions.map((q, i) => ({
+          questions: cat.questions.slice(0, settings.jeoPoints.length).map((q, i) => ({
             id: `jeo-${c}-${i}`,
-            question: q.q,
-            answer: q.a,
-            points: (i + 1) * 10,
+            question: q.question,
+            answer: q.answer,
+            points: settings.jeoPoints[i],
             status: 'open' as const,
           })),
         })),
@@ -151,15 +224,43 @@ function setupMode(game: Game, mode: Mode) {
   }
 }
 
-// Last Man Standing scoring. Eliminated players get their elimination rank,
-// survivors get one more than the number eliminated once the round is scored.
+// The picture at round r, item i, ready to start.
+function picItem(rounds: PicFull['rounds'], r: number, i: number) {
+  const round = rounds[r];
+  return {
+    category: round.category,
+    kind: round.kind,
+    roundIndex: r,
+    roundCount: rounds.length,
+    itemIndex: i,
+    itemCount: round.items.length,
+    image: round.items[i].image,
+    answer: round.items[i].answer,
+    seed: Math.floor(Math.random() * 2 ** 31),
+    status: 'ready' as const,
+    elapsedMs: 0,
+    runningSince: null,
+    queue: [],
+    answeringId: null,
+    winnerId: null,
+    awarded: 0,
+  };
+}
+
+function picElapsed(pic: PicState, now: number): number {
+  return pic.elapsedMs + (pic.runningSince ? now - pic.runningSince : 0);
+}
+
+// Last Man Standing scoring. Eliminated players get their elimination rank times
+// `step`, survivors one rank more than the number eliminated once the round is
+// scored.
 // Recomputing from scratch keeps undo exact.
-function syncLmsPoints(game: Game, round: LmsRound) {
+function syncLmsPoints(game: Game, round: LmsRound, step: number) {
   const target: Record<string, number> = {};
-  round.eliminated.forEach((id, i) => (target[id] = i + 1));
+  round.eliminated.forEach((id, i) => (target[id] = (i + 1) * step));
   if (round.scored) {
     for (const p of game.players) {
-      if (!round.eliminated.includes(p.id)) target[p.id] = round.eliminated.length + 1;
+      if (!round.eliminated.includes(p.id)) target[p.id] = (round.eliminated.length + 1) * step;
     }
   }
   for (const p of game.players) {
@@ -173,7 +274,7 @@ function finishCurrentMode(game: Game) {
   if (game.screen === 'lastManStanding' && game.lms) {
     const round = game.lms.rounds[game.lms.roundIndex];
     round.scored = true;
-    syncLmsPoints(game, round);
+    syncLmsPoints(game, round, game.lms.pointsPerPlace);
   }
 }
 
@@ -189,15 +290,24 @@ function closeJeopardyQuestion(game: Game, jeo: JeoState, status: 'answered' | '
 // Host actions. Returns false when the action does not apply.
 export function applyHostAction(game: Game, action: HostAction): boolean {
   switch (action.type) {
+    case 'plan.set': {
+      if (game.screen !== 'lobby' || !Array.isArray(action.modes)) return false;
+      const modes = action.modes.filter((m, i) => PLANNABLE_MODES.includes(m) && action.modes.indexOf(m) === i);
+      game.plan = [...modes, FINAL_MODE];
+      return true;
+    }
     case 'start': {
       if (game.screen !== 'lobby' || game.players.length === 0) return false;
+      // A mode without content in the pool cannot be played.
+      const counts = poolCounts();
+      if (game.plan.some((m) => counts[m] === 0)) return false;
       game.modeIndex = 0;
-      game.screen = MODE_ORDER[0];
-      setupMode(game, MODE_ORDER[0]);
+      game.screen = game.plan[0];
+      setupMode(game, game.plan[0]);
       return true;
     }
     case 'showLeaderboard': {
-      if (!MODE_ORDER.includes(game.screen as Mode)) return false;
+      if (!game.plan.includes(game.screen as Mode)) return false;
       finishCurrentMode(game);
       game.screen = 'leaderboard';
       return true;
@@ -208,10 +318,10 @@ export function applyHostAction(game: Game, action: HostAction): boolean {
         p.totalScore += p.modeScore;
         p.modeScore = 0;
       }
-      game.lms = game.wwm = game.hol = game.jeo = null;
+      game.lms = game.wwm = game.hol = game.geo = game.pic = game.jeo = null;
       game.modeIndex++;
-      if (game.modeIndex < MODE_ORDER.length) {
-        game.screen = MODE_ORDER[game.modeIndex];
+      if (game.modeIndex < game.plan.length) {
+        game.screen = game.plan[game.modeIndex];
         setupMode(game, game.screen);
       } else {
         game.screen = 'finale';
@@ -229,6 +339,8 @@ export function applyHostAction(game: Game, action: HostAction): boolean {
   if (game.screen === 'lastManStanding' && game.lms) return lmsAction(game, game.lms, action);
   if (game.screen === 'millionaire' && game.wwm) return wwmAction(game, game.wwm, action);
   if (game.screen === 'higherLower' && game.hol) return holAction(game, game.hol, action);
+  if (game.screen === 'geo' && game.geo) return geoAction(game, game.geo, action);
+  if (game.screen === 'pictures' && game.pic) return picAction(game, game.pic, action);
   if (game.screen === 'jeopardy' && game.jeo) return jeoAction(game, game.jeo, action);
   return false;
 }
@@ -257,7 +369,7 @@ function lmsAction(game: Game, lms: LmsState, action: HostAction): boolean {
         round.eliminated.splice(at, 1);
         if (!round.currentPlayerId) round.currentPlayerId = action.playerId;
       }
-      syncLmsPoints(game, round);
+      syncLmsPoints(game, round, lms.pointsPerPlace);
       return true;
     }
     case 'lms.skip': {
@@ -267,7 +379,7 @@ function lmsAction(game: Game, lms: LmsState, action: HostAction): boolean {
     case 'lms.nextRound': {
       if (lms.roundIndex >= lms.rounds.length - 1) return false;
       round.scored = true;
-      syncLmsPoints(game, round);
+      syncLmsPoints(game, round, lms.pointsPerPlace);
       lms.roundIndex++;
       return true;
     }
@@ -319,6 +431,7 @@ function holAction(game: Game, hol: HolState, action: HostAction): boolean {
     case 'hol.points': {
       const player = findPlayer(game, action.playerId);
       if (!player) return false;
+      if (!Number.isInteger(action.delta)) return false;
       player.modeScore = Math.max(0, player.modeScore + action.delta);
       return true;
     }
@@ -330,6 +443,91 @@ function holAction(game: Game, hol: HolState, action: HostAction): boolean {
       if (hol.roundIndex >= hol.rounds.length - 1) return false;
       hol.roundIndex++;
       for (const p of game.players) hol.lives[p.id] = HOL_MAX_LIVES;
+      return true;
+    }
+  }
+  return false;
+}
+
+function geoAction(game: Game, geo: GeoFull, action: HostAction): boolean {
+  switch (action.type) {
+    case 'geo.reveal': {
+      if (geo.revealed) return false;
+      const place = geo.places[geo.index];
+      for (const p of game.players) {
+        const guess = geo.guesses[p.id];
+        if (!guess) continue;
+        const km = distanceKm(guess, place);
+        const points = geoPoints(km, geo.minKm, geo.maxPoints);
+        geo.results[p.id] = { distanceKm: Math.round(km * 10) / 10, points };
+        p.modeScore += points;
+      }
+      geo.revealed = true;
+      return true;
+    }
+    case 'geo.next': {
+      if (!geo.revealed || geo.index >= geo.places.length - 1) return false;
+      geo.index++;
+      geo.guesses = {};
+      geo.results = {};
+      geo.revealed = false;
+      geo.endsAt = Date.now() + geo.seconds * 1000;
+      return true;
+    }
+  }
+  return false;
+}
+
+function picAction(game: Game, pic: PicFull, action: HostAction): boolean {
+  const cur = pic.current;
+  const now = Date.now();
+  switch (action.type) {
+    case 'pic.start': {
+      if (cur.status !== 'ready') return false;
+      cur.status = 'running';
+      cur.runningSince = now;
+      return true;
+    }
+    case 'pic.judge': {
+      const head = cur.queue.find((b) => !b.wrong);
+      if (cur.status !== 'paused' || !head) return false;
+      if (action.correct) {
+        const player = findPlayer(game, head.playerId);
+        cur.awarded = picPoints(cur, head.progress);
+        if (player) player.modeScore += cur.awarded;
+        cur.winnerId = head.playerId;
+        cur.answeringId = null;
+        cur.status = 'solved';
+        return true;
+      }
+      // Wrong: the next one in the queue answers. Only when nobody is left
+      // does the picture go on.
+      head.wrong = true;
+      cur.answeringId = cur.queue.find((b) => !b.wrong)?.playerId ?? null;
+      if (!cur.answeringId) {
+        cur.status = 'running';
+        cur.runningSince = now;
+      }
+      return true;
+    }
+    case 'pic.solve': {
+      if (cur.status === 'solved') return false;
+      cur.elapsedMs = picElapsed(cur, now);
+      cur.runningSince = null;
+      cur.answeringId = null;
+      cur.status = 'solved';
+      return true;
+    }
+    case 'pic.next': {
+      if (cur.status !== 'solved') return false;
+      let r = cur.roundIndex;
+      let i = cur.itemIndex + 1;
+      if (i >= pic.rounds[r].items.length) {
+        r++;
+        i = 0;
+      }
+      if (r >= pic.rounds.length) return false;
+      pic.current = { ...cur, ...picItem(pic.rounds, r, i) };
       return true;
     }
   }
@@ -419,6 +617,28 @@ export function applyPlayerAction(game: Game, playerId: string, action: PlayerAc
       const current = wwm?.answers[playerId];
       if (!wwm || wwm.revealed || !current || current.answer === null || current.locked) return false;
       current.locked = true;
+      return true;
+    }
+    case 'geo.guess': {
+      const geo = game.screen === 'geo' ? game.geo : null;
+      if (!geo || geo.revealed || Date.now() > geo.endsAt + 1000) return false;
+      const { lat, lng } = action;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return false;
+      geo.guesses[playerId] = { lat, lng };
+      return true;
+    }
+    case 'pic.buzz': {
+      const cur = game.screen === 'pictures' ? game.pic?.current : null;
+      // The first buzz stops the picture; others can still join the queue at
+      // the same progress until it runs again.
+      if (!cur || (cur.status !== 'running' && cur.status !== 'paused') || cur.queue.some((b) => b.playerId === playerId)) return false;
+      if (cur.status === 'running') {
+        cur.elapsedMs = picElapsed(cur, Date.now());
+        cur.runningSince = null;
+        cur.status = 'paused';
+      }
+      cur.queue.push({ playerId, progress: picProgress(cur, cur.elapsedMs), wrong: false });
+      cur.answeringId ??= playerId;
       return true;
     }
     case 'jeo.buzz': {

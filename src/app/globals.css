@@ -151,3 +151,38 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Wo liegt das? reveal: pins pop in, the target drops, lines draw, labels fade. */
+.map-pin-pop {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: map-pin-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.map-pin-drop {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: map-pin-drop 0.6s cubic-bezier(0.34, 1.45, 0.64, 1) both;
+}
+.map-line-draw {
+  animation: map-line-draw 0.7s ease-out both;
+}
+.map-fade-in {
+  animation: map-fade-in 0.35s ease-out both;
+}
+@keyframes map-pin-pop {
+  from { transform: scale(0); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes map-pin-drop {
+  from { transform: translateY(-80px); opacity: 0; }
+  40% { opacity: 1; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes map-line-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes map-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

@@ -42,3 +42,6 @@ next-env.d.ts
 
 # server build
 /dist
+
+# question pool and uploads (local DATA_DIR)
+/data

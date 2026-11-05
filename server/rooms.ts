@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { GameState, Player } from '../src/types/game';
 import { Game, createGame } from './game';
+import { poolCounts } from './pool';
 
 export interface Room {
   code: string;
@@ -114,13 +115,15 @@ export function isRoomIdle(room: Room, now: number): boolean {
 
 export function hostView(room: Room): GameState {
   const { game } = room;
-  const wwm = game.wwm;
+  const { wwm, geo } = game;
   return {
     roomCode: room.code,
     hostName: room.hostName,
     hostConnected: room.hostSockets.size > 0,
     screen: game.screen,
+    plan: game.plan,
     modeIndex: game.modeIndex,
+    poolCounts: game.screen === 'lobby' ? poolCounts() : undefined,
     players: game.players,
     lms: game.lms,
     wwm: wwm && {
@@ -131,6 +134,25 @@ export function hostView(room: Room): GameState {
       revealed: wwm.revealed,
     },
     hol: game.hol,
+    geo: geo && {
+      category: geo.category,
+      map: geo.map,
+      minKm: geo.minKm,
+      maxPoints: geo.maxPoints,
+      index: geo.index,
+      total: geo.places.length,
+      place: {
+        name: geo.places[geo.index].name,
+        image: geo.places[geo.index].image ?? null,
+        lat: geo.places[geo.index].lat,
+        lng: geo.places[geo.index].lng,
+      },
+      endsAt: geo.endsAt,
+      guesses: geo.guesses,
+      revealed: geo.revealed,
+      results: geo.results,
+    },
+    pic: game.pic?.current ?? null,
     jeo: game.jeo,
     finaleStartedAt: game.finaleStartedAt,
     serverTime: Date.now(),
@@ -138,7 +160,7 @@ export function hostView(room: Room): GameState {
 }
 
 export function playerView(room: Room, full: GameState): GameState {
-  const view: GameState = { ...full };
+  const view: GameState = { ...full, poolCounts: undefined };
 
   // Totals stay secret until the finale to keep the suspense.
   if (full.screen !== 'finale') view.players = full.players.map((p) => ({ ...p, totalScore: 0 }));
@@ -175,6 +197,22 @@ export function playerView(room: Room, full: GameState): GameState {
     };
   }
 
+  if (full.geo && !full.geo.revealed) {
+    view.geo = {
+      ...full.geo,
+      place: { ...full.geo.place, lat: null, lng: null },
+      guesses: Object.fromEntries(Object.keys(full.geo.guesses).map((id) => [id, null])),
+    };
+  }
+
+  if (full.pic) {
+    view.pic = {
+      ...full.pic,
+      image: full.pic.status === 'ready' ? null : full.pic.image,
+      answer: full.pic.status === 'solved' ? full.pic.answer : null,
+    };
+  }
+
   if (full.jeo) {
     const active = full.jeo.active;
     view.jeo = {
@@ -193,11 +231,19 @@ export function playerView(room: Room, full: GameState): GameState {
   return view;
 }
 
-// Players need a personal view only for Millionaire (their own pick).
+// Players need a personal view while their own pick is secret: the
+// Millionaire answer and the Wo liegt das? pin.
+export function needsPersonalView(base: GameState): boolean {
+  return (!!base.wwm && !base.wwm.revealed) || (!!base.geo && !base.geo.revealed);
+}
+
 export function personalView(base: GameState, playerId: string, full: GameState): GameState {
-  if (!base.wwm || base.wwm.revealed || !full.wwm?.answers[playerId]) return base;
-  return {
-    ...base,
-    wwm: { ...base.wwm, answers: { ...base.wwm.answers, [playerId]: full.wwm.answers[playerId] } },
-  };
+  let view = base;
+  if (base.wwm && !base.wwm.revealed && full.wwm?.answers[playerId]) {
+    view = { ...view, wwm: { ...base.wwm, answers: { ...base.wwm.answers, [playerId]: full.wwm.answers[playerId] } } };
+  }
+  if (base.geo && !base.geo.revealed && full.geo?.guesses[playerId]) {
+    view = { ...view, geo: { ...base.geo, guesses: { ...base.geo.guesses, [playerId]: full.geo.guesses[playerId] } } };
+  }
+  return view;
 }
