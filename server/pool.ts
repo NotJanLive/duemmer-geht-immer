@@ -23,8 +23,13 @@ import {
   WWM_MAX_POINTS,
   WWM_PER_LEVEL,
   WwmContent,
+  ITUNES_COVER,
+  ITUNES_PREVIEW,
+  SONG_PREVIEW_SECONDS,
+  SongContent,
+  SongItem,
 } from '../src/types/pool';
-import { geoData, higherLowerData, jeopardyData, lmsData, millionaireData } from './seedData';
+import { geoData, higherLowerData, jeopardyData, lmsData, millionaireData, songData } from './seedData';
 
 // The pool lives outside the repo (the repo is public) in DATA_DIR. In
 // production that is its own Docker volume, because the deploy wipes the app
@@ -52,6 +57,7 @@ function seed(): PoolData {
       higherLower: higherLowerData.map((r) => ({ ...meta(), topic: r.topic, unit: r.unit, items: r.items })),
       geo: geoData.map((c) => ({ ...meta(), ...c })),
       pictures: [],
+      songs: songData.map((c) => ({ ...meta(), name: c.name, songs: c.songs.map((s) => ({ ...s })) })),
       jeopardy: jeopardyData.map((c) => ({
         ...meta(),
         name: c.name,
@@ -182,6 +188,13 @@ export function pickPictures(rounds: number, perRound: number): { category: Pool
   return picked.map((category) => ({ category, items: shuffle(category.items).slice(0, perRound) }));
 }
 
+// Songrätsel: the freshest categories, each with `perRound` random songs.
+export function pickSongs(rounds: number, perRound: number): { category: PoolEntry<'songs'>; songs: SongItem[] }[] {
+  const picked = freshestFirst(getPool().entries.songs).slice(0, rounds);
+  markPlayed(picked);
+  return picked.map((category) => ({ category, songs: shuffle(category.songs).slice(0, perRound) }));
+}
+
 export function pickJeopardy(count: number): PoolEntry<'jeopardy'>[] {
   const picked = freshestFirst(getPool().entries.jeopardy).slice(0, count);
   markPlayed(picked);
@@ -283,12 +296,33 @@ function validatePictures(raw: Record<string, unknown>): Result<PicContent> {
   return { ok: true, value: { name, kind, items: items as PicContent['items'] } };
 }
 
+function validateSongs(raw: Record<string, unknown>): Result<SongContent> {
+  const name = text(raw.name, 60);
+  if (!name) return { ok: false, error: 'Kategoriename fehlt' };
+  const songs: SongItem[] = [];
+  for (const [i, s] of (Array.isArray(raw.songs) ? raw.songs : []).entries()) {
+    const song = (s ?? {}) as Record<string, unknown>;
+    const trackId = Number(song.trackId);
+    const title = text(song.title, 200);
+    const artist = text(song.artist, 200);
+    const preview = typeof song.preview === 'string' ? song.preview : '';
+    const cover = typeof song.cover === 'string' && ITUNES_COVER.test(song.cover) ? song.cover : '';
+    const offset = Math.max(0, Math.min(SONG_PREVIEW_SECONDS - 5, Number(song.offset) || 0));
+    if (!Number.isInteger(trackId) || trackId <= 0 || !title || !artist) return { ok: false, error: `"${name}": Song ${i + 1} ist unvollständig` };
+    if (!ITUNES_PREVIEW.test(preview)) return { ok: false, error: `"${name}": "${title}" hat keine gültige Hörprobe` };
+    songs.push({ trackId, title, artist, cover, preview, offset: Math.round(offset * 10) / 10 });
+  }
+  if (songs.length < 1 || songs.length > 200) return { ok: false, error: `"${name}": 1 bis 200 Songs` };
+  return { ok: true, value: { name, songs } };
+}
+
 const validators: { [M in PoolMode]: (raw: Record<string, unknown>) => Result<PoolContent[M]> } = {
   lastManStanding: validateLms,
   millionaire: validateWwm,
   higherLower: validateHol,
   geo: validateGeo,
   pictures: validatePictures,
+  songs: validateSongs,
   jeopardy: validateJeo,
 };
 
@@ -350,6 +384,8 @@ const NUMBER_LIMITS = {
   picPerRound: [1, 30],
   geoMaxPoints: [1, 500],
   picRevealSeconds: [5, 600],
+  songRounds: [1, 20],
+  songPerRound: [1, 50],
   jeoCategories: [1, 10],
 } as const;
 

@@ -34,16 +34,16 @@ export default function LastManStanding() {
 
   return (
     <ModeLayout
-      side={
+      board={
         <Scoreboard
           players={game.players}
           meId={meId}
           turnId={roundOver ? null : round.currentPlayerId}
           title={isHost ? "Spieler antippen zum Ausscheiden" : undefined}
           dimmed={(p) => round.eliminated.includes(p.id)}
-          note={(p) => {
+          tag={(p) => {
             const at = round.eliminated.indexOf(p.id);
-            return at === -1 ? null : `Als ${at + 1}. ausgeschieden`;
+            return at === -1 ? null : <span className="normal-case">{at + 1}. raus</span>;
           }}
           onSelect={isHost && !round.scored ? (p) => hostAction({ type: "lms.toggleEliminated", playerId: p.id }) : undefined}
         />
@@ -52,8 +52,8 @@ export default function LastManStanding() {
         isHost && (
           <>
             {!roundOver && (
-              <Button variant="secondary" onClick={() => hostAction({ type: "lms.skip" })}>
-                <SkipForward /> Überspringen
+              <Button variant="secondary" disabled={alive.length < 2} onClick={() => hostAction({ type: "lms.skip" })}>
+                <SkipForward /> Nächster Spieler
               </Button>
             )}
             {isLastRound ? (
@@ -104,7 +104,6 @@ export default function LastManStanding() {
           )}
         </div>
       </Panel>
-      {isHost && <p className="text-sm text-muted">Begriff antippen, wenn er genannt wurde. Danach ist automatisch die nächste Person dran.</p>}
     </ModeLayout>
   );
 }

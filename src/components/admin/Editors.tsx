@@ -5,7 +5,9 @@ import { ImagePlus, MapPin, Plus, Search, X } from "lucide-react";
 import PlaceMap from "./PlaceMap";
 import { Button, Panel } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { GeoContent, HolContent, JeoContent, LmsContent, MAPS, MapId, PICTURE_KINDS, PicContent, PictureKind, PoolContent, PoolMode, WWM_MAX_POINTS, WwmContent } from "@/types/pool";
+import { GeoContent, HolContent, JeoContent, LmsContent, MAPS, MapId, PICTURE_KINDS, PicContent, PictureKind, PoolContent, PoolMode, SONG_PREVIEW_SECONDS, SongContent, WWM_MAX_POINTS, WwmContent } from "@/types/pool";
+import { SongSearch } from "@/components/SongSearch";
+import { playSnippet, stopSong, unlockSongAudio } from "@/lib/songAudio";
 import { Field, Select, TextArea, TextInput } from "./fields";
 
 export const EMPTY: { [M in PoolMode]: PoolContent[M] } = {
@@ -14,6 +16,7 @@ export const EMPTY: { [M in PoolMode]: PoolContent[M] } = {
   higherLower: { topic: "", unit: "", items: [] },
   geo: { name: "", map: "de", minKm: MAPS.de.minKm, places: [] },
   pictures: { name: "", kind: "blur", items: [] },
+  songs: { name: "", songs: [] },
   jeopardy: { name: "", questions: Array.from({ length: 5 }, () => ({ question: "", answer: "" })) },
 };
 
@@ -25,7 +28,7 @@ export function contentOf<M extends PoolMode>(mode: M, entry: PoolContent[M]): P
 
 export function entryTitle(mode: PoolMode, e: PoolContent[PoolMode]): string {
   if (mode === "millionaire") return (e as WwmContent).question;
-  if (mode === "jeopardy" || mode === "geo" || mode === "pictures") return (e as JeoContent | GeoContent | PicContent).name;
+  if (mode === "jeopardy" || mode === "geo" || mode === "pictures" || mode === "songs") return (e as JeoContent | GeoContent | PicContent | SongContent).name;
   return (e as LmsContent | HolContent).topic;
 }
 
@@ -48,6 +51,10 @@ export function entryDetail(mode: PoolMode, e: PoolContent[PoolMode]): string {
     case "pictures": {
       const p = e as PicContent;
       return `${PICTURE_KINDS[p.kind]} · ${p.items.length} Bilder: ${p.items.slice(0, 6).map((i) => i.answer).join(", ")}${p.items.length > 6 ? " …" : ""}`;
+    }
+    case "songs": {
+      const s = e as SongContent;
+      return `${s.songs.length} Songs: ${s.songs.slice(0, 5).map((x) => `${x.title} (${x.artist})`).join(", ")}${s.songs.length > 5 ? " …" : ""}`;
     }
     case "jeopardy":
       return `${(e as JeoContent).questions.length} Fragen`;
@@ -490,6 +497,75 @@ export function PicEditor({ initial, isNew, onSave, ...rest }: EditorProps<"pict
         <Button variant="secondary" size="sm" onClick={() => setItems([...items, { image: "", answer: "" }])}>
           <Plus /> Bild
         </Button>
+      </div>
+    </EditorFrame>
+  );
+}
+
+// Songrätsel: songs come from the iTunes search. The start point decides which
+// part of the 30 s preview the snippets play; the play button tries 5 s of it.
+export function SongEditor({ initial, isNew, onSave, ...rest }: EditorProps<"songs">) {
+  const [name, setName] = useState(initial.name);
+  const [songs, setSongs] = useState(initial.songs);
+  const [playing, setPlaying] = useState<number | null>(null);
+  const update = (i: number, patch: Partial<SongContent["songs"][number]>) => setSongs(songs.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+
+  const tryOut = (i: number) => {
+    unlockSongAudio();
+    if (playing === i) {
+      stopSong();
+      setPlaying(null);
+      return;
+    }
+    setPlaying(i);
+    void playSnippet(songs[i].preview, songs[i].offset, 5, Date.now() + 50);
+    setTimeout(() => setPlaying((p) => (p === i ? null : p)), 5100);
+  };
+
+  return (
+    <EditorFrame title={isNew ? "Neue Kategorie" : "Kategorie bearbeiten"} onSubmit={() => onSave({ name, songs })} {...rest}>
+      <Field label="Kategorie">
+        <TextInput value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      </Field>
+      <div className="space-y-2">
+        <span className="label block">Songs ({songs.length})</span>
+        <SongSearch
+          down
+          placeholder="Song suchen und hinzufügen …"
+          onPick={(hit) => {
+            if (songs.some((s) => s.trackId === hit.trackId)) return;
+            setSongs([...songs, { ...hit, offset: 0 }]);
+          }}
+        />
+        {songs.map((s, i) => (
+          <div key={s.trackId} className="flex flex-wrap items-center gap-3 rounded-xl border border-line p-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {s.cover && <img src={s.cover} alt="" className="size-12 rounded-md object-cover" />}
+            <div className="min-w-40 flex-1">
+              <p className="truncate font-bold">{s.title}</p>
+              <p className="truncate text-sm text-muted">{s.artist}</p>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-muted" title="Ab wo in der 30-s-Hörprobe der Ausschnitt startet">
+              Start
+              <input
+                type="range"
+                min={0}
+                max={SONG_PREVIEW_SECONDS - 5}
+                step={0.5}
+                value={s.offset}
+                onChange={(e) => update(i, { offset: Number(e.target.value) })}
+                className="w-32 accent-blue-500"
+              />
+              <span className="w-12 font-mono tabular-nums">{s.offset.toLocaleString("de-DE")} s</span>
+            </label>
+            <Button variant="secondary" size="sm" onClick={() => tryOut(i)}>
+              {playing === i ? "Stopp" : "Anhören"}
+            </Button>
+            <Button variant="ghost" size="sm" title="Song entfernen" onClick={() => setSongs(songs.filter((_, j) => j !== i))}>
+              <X />
+            </Button>
+          </div>
+        ))}
       </div>
     </EditorFrame>
   );

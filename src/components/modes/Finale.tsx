@@ -6,7 +6,6 @@ import { DoorOpen, Play, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGame, useRoomStore } from "@/lib/store";
 import { hostAction } from "@/lib/socket";
-import { clearSession } from "@/lib/session";
 import { Button, Panel } from "@/components/ui";
 import { ModeHeading, ModeLayout } from "@/components/room/Shell";
 
@@ -20,7 +19,7 @@ const CONFETTI = ["#60a5fa", "#c084fc", "#f472b6", "#eab308"];
 function timeline(scores: number[], elapsed: number) {
   const steps = [...new Set(scores)].sort((a, b) => a - b);
   for (let i = 0; i < steps.length; i++) {
-    const from = i === 0 ? 0 : steps[i - 1];
+    const from = i === 0 ? Math.min(0, steps[0]) : steps[i - 1];
     const t = elapsed - i * STEP_MS;
     if (t < RISE_MS) {
       return { level: from + (steps[i] - from) * Math.max(0, t / RISE_MS), outBelow: from, done: false };
@@ -78,9 +77,8 @@ export default function Finale() {
   );
 
   const close = () => {
-    if (!confirm("Spiel wirklich beenden? Alle Spieler werden aus dem Raum entfernt.")) return;
-    hostAction({ type: "closeRoom" });
-    clearSession();
+    if (!confirm("Show beenden?")) return;
+    hostAction({ type: "closeShow" });
     router.replace("/");
   };
 
@@ -139,7 +137,7 @@ export default function Finale() {
               <div className="h-3 overflow-hidden rounded-full bg-raised">
                 <div
                   className={cn("h-full rounded-full", won ? "bg-gold shadow-[0_0_12px_rgba(234,179,8,0.6)]" : out ? "bg-red-900" : "bg-gradient-to-r from-accent-strong to-purple-500")}
-                  style={{ width: `${(shown / top) * 100}%` }}
+                  style={{ width: `${Math.max(0, shown / top) * 100}%` }}
                 />
               </div>
             </div>

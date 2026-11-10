@@ -147,6 +147,7 @@ export default function Pictures() {
 
   return (
     <ModeLayout
+      fill
       side={
         <>
           <BuzzQueue pic={pic} name={name} meId={meId} />
@@ -167,19 +168,24 @@ export default function Pictures() {
         </Panel>
       )}
 
-      <Panel className="stripe space-y-3 p-2 sm:p-3">
-        <PictureView pic={pic} progress={progress} />
+      {/* The picture is as big as the space left above the cams. */}
+      <Panel className="stripe flex flex-col gap-3 p-2 sm:p-3 lg:min-h-0 lg:flex-1">
+        <div className="fit-box">
+          <div className="mx-auto w-full" style={{ maxWidth: "calc(var(--fit-h, 60vh) * 16 / 9)" }}>
+            <PictureView pic={pic} progress={progress} />
+          </div>
+        </div>
         <ProgressBar pic={pic} progress={progress} />
       </Panel>
 
       {status}
 
-      {!isHost && (pic.status === "running" || pic.status === "paused") && (
+      {!!meId && (pic.status === "running" || pic.status === "paused") && (
         <button
           disabled={!canBuzz}
           onPointerDown={() => canBuzz && playerAction({ type: "pic.buzz" })}
           className={cn(
-            "headline mx-auto grid aspect-square w-full max-w-56 place-items-center rounded-full border-4 text-4xl transition-transform select-none",
+            "headline mx-auto grid aspect-square w-full max-w-56 shrink-0 place-items-center rounded-full border-4 text-4xl transition-transform select-none lg:max-w-32 lg:text-3xl",
             canBuzz ? "border-red-400 bg-red-600 text-white shadow-[0_0_70px_-5px_rgba(220,38,38,0.7)] active:scale-95 active:bg-red-700" : "border-line bg-surface text-base text-faint",
           )}
         >

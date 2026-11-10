@@ -4,6 +4,7 @@ import { CSSProperties, MouseEvent, ReactNode, useEffect, useMemo, useRef, useSt
 import { geoMercator, geoPath } from "d3-geo";
 import { select } from "d3-selection";
 import { ZoomBehavior, ZoomTransform, zoom, zoomIdentity } from "d3-zoom";
+import { interpolateZoom } from "d3-interpolate";
 import type { Feature, MultiPoint } from "geojson";
 import { Maximize, Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,10 +27,20 @@ export interface MapLine {
   color: string;
   label?: string; // shown in the middle, e.g. the distance
   delay?: number; // ms before it is drawn
+  duration?: number; // ms the drawing takes (default from the CSS)
+}
+
+// Where the map should look: it glides there whenever `key` changes. One
+// point zooms in close, several are fitted with some margin.
+export interface MapCamera {
+  key: string;
+  points: { lat: number; lng: number }[];
+  duration: number;
 }
 
 const WIDTH = 1000;
-const MAX_ZOOM: Record<MapId, number> = { de: 14, eu: 24, world: 40 };
+// Deep enough to tell two pins a few kilometres apart.
+const MAX_ZOOM: Record<MapId, number> = { de: 80, eu: 250, world: 600 };
 
 let worldPromise: Promise<Feature[]> | null = null;
 function loadWorld(): Promise<Feature[]> {
@@ -69,16 +80,22 @@ export default function GeoMap({
   markers = [],
   lines = [],
   onPick,
+  camera,
   className,
 }: {
   map: MapId;
   markers?: MapMarker[];
   lines?: MapLine[];
   onPick?: (pos: { lat: number; lng: number }) => void;
+  camera?: MapCamera | null;
   className?: string;
 }) {
   const [features, setFeatures] = useState<Feature[] | null>(null);
   const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity);
+  const transformRef = useRef<ZoomTransform>(zoomIdentity);
+  useEffect(() => {
+    transformRef.current = transform;
+  }, [transform]);
   const [cssWidth, setCssWidth] = useState(0);
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -123,6 +140,49 @@ export default function GeoMap({
       selection.on(".zoom", null);
     };
   }, [geo, map]);
+
+  // Glide to the camera's points: zoom and pan together (d3's smooth zoom).
+  const cameraKey = camera?.key;
+  useEffect(() => {
+    const el = overlay.current;
+    const z = behavior.current;
+    if (!camera || !el || !z || !geo) return;
+    // No points: back to the whole region.
+    let k = 1;
+    let cx = WIDTH / 2;
+    let cy = geo.height / 2;
+    if (camera.points.length) {
+      const xy = camera.points.map((p) => geo.projection([p.lng, p.lat]) ?? [0, 0]);
+      const xs = xy.map((p) => p[0]);
+      const ys = xy.map((p) => p[1]);
+      const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+      const max = MAX_ZOOM[map];
+      const single = x1 - x0 < 1 && y1 - y0 < 1;
+      k = single ? Math.min(max, max * 0.12) : Math.max(1, Math.min(max, 0.6 * Math.min(WIDTH / (x1 - x0 || 1), geo.height / (y1 - y0 || 1))));
+      cx = (x0 + x1) / 2;
+      cy = (y0 + y1) / 2;
+    }
+    const from = (() => {
+      const t = transformRef.current;
+      return [(WIDTH / 2 - t.x) / t.k, (geo.height / 2 - t.y) / t.k, WIDTH / t.k] as [number, number, number];
+    })();
+    const to: [number, number, number] = [cx, cy, WIDTH / k];
+    const lerp = interpolateZoom(from, to);
+    const selection = select(el);
+    const start = performance.now();
+    let frame = 0;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / camera.duration);
+      const e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+      const [vx, vy, w] = lerp(e);
+      const scale = WIDTH / w;
+      selection.call(z.transform, zoomIdentity.translate(WIDTH / 2 - vx * scale, geo.height / 2 - vy * scale).scale(scale));
+      if (t < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraKey, geo, map]);
 
   useEffect(() => {
     const el = box.current;
@@ -185,7 +245,7 @@ export default function GeoMap({
     <div
       ref={box}
       className={cn("relative mx-auto overflow-hidden rounded-xl border border-line bg-zinc-950", className)}
-      style={{ width: `min(100%, calc(65vh * ${WIDTH / geo.height}))`, aspectRatio: `${WIDTH} / ${geo.height}` }}
+      style={{ width: `min(100%, calc(var(--fit-h, 65vh) * ${WIDTH / geo.height}))`, aspectRatio: `${WIDTH} / ${geo.height}` }}
     >
       <canvas ref={canvas} className="absolute inset-0 size-full" />
       <svg
@@ -216,10 +276,10 @@ export default function GeoMap({
                 pathLength={1}
                 strokeDasharray={1}
                 className={animated ? "map-line-draw" : undefined}
-                style={{ animationDelay: `${l.delay ?? 0}ms` } as CSSProperties}
+                style={{ animationDelay: `${l.delay ?? 0}ms`, ...(l.duration ? { animationDuration: `${l.duration}ms` } : {}) } as CSSProperties}
               />
               {l.label && (
-                <Pill x={(x1 + x2) / 2} y={(y1 + y2) / 2} px={px} color={l.color} text={l.label} delay={animated ? (l.delay ?? 0) + 600 : undefined} center />
+                <Pill x={(x1 + x2) / 2} y={(y1 + y2) / 2} px={px} color={l.color} text={l.label} delay={animated ? (l.delay ?? 0) + (l.duration ?? 600) : undefined} center />
               )}
             </g>
           );

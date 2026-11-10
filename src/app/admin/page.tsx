@@ -2,13 +2,13 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Download, LogOut, Pencil, Plus, RotateCcw, Search, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Download, Pencil, Plus, RotateCcw, Search, Trash2, Upload } from "lucide-react";
 import { Button, Panel, Spinner } from "@/components/ui";
 import { ApiError, api } from "@/lib/adminApi";
 import { cn } from "@/lib/utils";
 import { SCREEN_LABELS } from "@/types/game";
 import { POOL_MODES, PoolContent, PoolData, PoolEntry, PoolMode, PoolSettings, WWM_MAX_POINTS, WWM_PER_LEVEL, WWM_QUESTIONS } from "@/types/pool";
-import { EMPTY, GeoEditor, HolEditor, JeoEditor, LmsEditor, PicEditor, WwmEditor, contentOf, entryDetail, entryTitle } from "@/components/admin/Editors";
+import { EMPTY, GeoEditor, HolEditor, JeoEditor, LmsEditor, PicEditor, SongEditor, WwmEditor, contentOf, entryDetail, entryTitle } from "@/components/admin/Editors";
 import { Field, PointsPill, Select, TextArea, TextInput } from "@/components/admin/fields";
 
 type Tab = PoolMode | "settings" | "import";
@@ -23,6 +23,7 @@ const ENTRY_WORD: Record<PoolMode, string> = {
   higherLower: "Themen",
   geo: "Kategorien",
   pictures: "Kategorien",
+  songs: "Kategorien",
   jeopardy: "Kategorien",
 };
 
@@ -46,12 +47,6 @@ export default function AdminPage() {
     load();
   }, [load]);
 
-  const logout = async () => {
-    await api("logout", "POST", {});
-    setPool(null);
-    setState("login");
-  };
-
   if (state === "loading") {
     return (
       <main className="grid min-h-dvh place-items-center">
@@ -70,9 +65,10 @@ export default function AdminPage() {
             Dümmer geht Immer
           </Link>
         </div>
-        <Button variant="ghost" size="sm" onClick={logout}>
-          <LogOut /> Abmelden
-        </Button>
+        {/* No logout here: the host is signed in through Discord anyway. */}
+        <Link href="/" className="inline-flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-bold uppercase text-muted hover:border-line-strong hover:text-white">
+          <ArrowLeft className="size-4" /> Zur Startseite
+        </Link>
       </header>
 
       <nav className="flex flex-wrap gap-1.5">
@@ -128,6 +124,9 @@ function Login({ onDone }: { onDone: () => void }) {
           <Button type="submit" className="w-full" disabled={busy || !password}>
             Anmelden
           </Button>
+          <Link href="/" className="block text-center text-sm text-muted hover:text-white">
+            Zur Startseite
+          </Link>
         </form>
       </Panel>
     </main>
@@ -168,7 +167,7 @@ function ModePool({ mode, pool, reload }: { mode: PoolMode; pool: PoolData; relo
   }, [entries, mode, query, level, sort]);
 
   const unplayed = entries.filter((e) => !e.lastPlayedAt).length;
-  const perShow = { lastManStanding: pool.settings.lmsRounds, millionaire: WWM_QUESTIONS, higherLower: pool.settings.holRounds, geo: 1, pictures: pool.settings.picRounds, jeopardy: pool.settings.jeoCategories }[mode];
+  const perShow = { lastManStanding: pool.settings.lmsRounds, millionaire: WWM_QUESTIONS, higherLower: pool.settings.holRounds, geo: 1, pictures: pool.settings.picRounds, songs: pool.settings.songRounds, jeopardy: pool.settings.jeoCategories }[mode];
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -237,6 +236,7 @@ function ModePool({ mode, pool, reload }: { mode: PoolMode; pool: PoolData; relo
           {mode === "higherLower" && <HolEditor initial={editing.content as PoolContent["higherLower"]} onSave={save} {...editorProps} />}
           {mode === "geo" && <GeoEditor initial={editing.content as PoolContent["geo"]} onSave={save} {...editorProps} />}
           {mode === "pictures" && <PicEditor initial={editing.content as PoolContent["pictures"]} onSave={save} {...editorProps} />}
+          {mode === "songs" && <SongEditor initial={editing.content as PoolContent["songs"]} onSave={save} {...editorProps} />}
           {mode === "jeopardy" && <JeoEditor initial={editing.content as PoolContent["jeopardy"]} onSave={save} {...editorProps} />}
         </div>
       )}
@@ -334,6 +334,8 @@ type NumberKey =
   | "picRounds"
   | "picPerRound"
   | "picRevealSeconds"
+  | "songRounds"
+  | "songPerRound"
   | "jeoCategories";
 type ListKey = "jeoPoints";
 
@@ -373,6 +375,14 @@ const SECTIONS: { title: string; note?: string; numbers: { key: NumberKey; label
       { key: "picRevealSeconds", label: "Sekunden bis ganz aufgedeckt", hint: "" },
     ],
     tiers: true,
+  },
+  {
+    title: "Songrätsel",
+    numbers: [
+      { key: "songRounds", label: "Runden", hint: "Kategorien pro Show" },
+      { key: "songPerRound", label: "Songs pro Runde", hint: "" },
+    ],
+    note: "Stufen fest: 0,2 s = 5, 0,5 s = 4, 1 s = 3, 3 s = 2, 5 s = 1 Punkt.",
   },
   {
     title: "Jeopardy",
@@ -480,6 +490,7 @@ const FORMATS: Record<PoolMode, string> = {
   higherLower: '{ "topic": "Kalorien pro 100 g", "unit": "kcal", "items": [{ "label": "Apfel", "value": 52 }] }',
   geo: '{ "name": "Deutsche Städte", "map": "de", "minKm": 400, "places": [{ "name": "Kiel", "lat": 54.32, "lng": 10.12 }] }',
   pictures: '{ "name": "Flaggen", "kind": "reveal", "items": [{ "image": "/media/….png", "answer": "Japan" }] }',
+  songs: '{ "name": "Hits", "songs": [{ "trackId": 1526194192, "title": "Mr. Brightside", "artist": "The Killers", "cover": "https://is1-ssl.mzstatic.com/…", "preview": "https://audio-ssl.itunes.apple.com/….m4a", "offset": 0 }] }',
   jeopardy: '{ "name": "Geschichte", "questions": [{ "question": "…", "answer": "…" }] }',
 };
 

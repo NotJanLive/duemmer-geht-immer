@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { IncomingMessage, ServerResponse } from 'http';
 import { POOL_MODES, PoolContent, PoolMode } from '../src/types/pool';
 import { saveImage } from './media';
+import { isHostRequest } from './auth';
 import { addEntries, getPool, isPoolMode, removeEntries, resetPlayed, savePool, updateEntry, updateSettings, validate } from './pool';
 
 // JSON API for /admin. Only the person with ADMIN_PASSWORD gets in. Without
@@ -27,6 +28,7 @@ function tokenFrom(req: IncomingMessage): string | null {
 }
 
 function isLoggedIn(req: IncomingMessage): boolean {
+  if (isHostRequest(req)) return true;
   const token = tokenFrom(req);
   const expires = token ? sessions.get(token) : undefined;
   if (!token || !expires) return false;

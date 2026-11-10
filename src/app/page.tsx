@@ -1,170 +1,259 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Crown, LogIn, Users } from "lucide-react";
-import { Button, Panel, Spinner } from "@/components/ui";
-import { connectSocket } from "@/lib/socket";
-import { StoredSession, clearSession, lastName, loadSession, saveSession, sessionIdFor } from "@/lib/session";
-import { SessionReply } from "@/types/game";
+import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowRight, Check, Copy, Crown, Eye, LogOut, Play, Settings, Trophy } from "lucide-react";
+import { Button, Panel, PanelTitle, Spinner } from "@/components/ui";
+import { Avatar, LeaderboardTable, StatTiles } from "@/components/stats";
+import { getSocket } from "@/lib/socket";
+import { useApi, useMe } from "@/lib/me";
+import { useRoomStore } from "@/lib/store";
+import { LeaderboardRow, Me, PlayerStats } from "@/types/stats";
+import { SCREEN_LABELS } from "@/types/game";
 
-type View = "choose" | "create" | "join";
+const ERRORS: Record<string, string> = {
+  member: "Nur Mitglieder des Dümmer-geht-immer-Servers können mitspielen.",
+  state: "Die Anmeldung ist abgelaufen. Versuch es noch mal.",
+  login: "Die Anmeldung hat nicht geklappt.",
+  setup: "Die Discord-Anmeldung ist auf dem Server noch nicht eingerichtet.",
+};
 
-export default function Home() {
-  const router = useRouter();
-  const [view, setView] = useState<View>("choose");
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [resume, setResume] = useState<StoredSession | null>(null);
+function Title({ small }: { small?: boolean }) {
+  return (
+    <h1 className={small ? "headline title-text text-3xl sm:text-4xl" : "headline title-text pb-1 text-center text-5xl sm:text-7xl"}>
+      Dümmer{small ? " " : <br />}geht immer
+    </h1>
+  );
+}
 
-  useEffect(() => {
-    // Reading storage and the URL only works after mount.
-    /* eslint-disable react-hooks/set-state-in-effect */
-    setResume(loadSession());
-    setName(lastName());
-    const linked = new URLSearchParams(window.location.search).get("code");
-    if (linked) {
-      setCode(linked.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6));
-      setView("join");
-    }
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
-
-  const open = (next: View) => {
-    setError("");
-    setView(next);
-  };
-
-  const finish = (r: SessionReply, trimmed: string) => {
-    if (!r.ok || !r.roomCode || !r.sessionId || !r.role) {
-      setError(r.error ?? "Das hat nicht geklappt");
-      setBusy(false);
-      return;
-    }
-    saveSession({ roomCode: r.roomCode, sessionId: r.sessionId, role: r.role, name: trimmed });
-    router.push(`/room/${r.roomCode}`);
-  };
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) return setError("Bitte gib deinen Namen ein");
-    if (view === "join" && code.length !== 6) return setError("Der Raumcode hat 6 Zeichen");
-
-    setBusy(true);
-    setError("");
-    try {
-      const socket = await connectSocket();
-      if (view === "create") socket.emit("createRoom", trimmed, (r) => finish(r, trimmed));
-      else socket.emit("joinRoom", code, trimmed, sessionIdFor(code), (r) => finish(r, trimmed));
-    } catch {
-      setError("Keine Verbindung zum Server");
-      setBusy(false);
-    }
-  };
-
+function Login() {
+  const error = useSearchParams().get("error");
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-4 py-10">
-      <h1 className="headline title-text mb-12 pb-1 text-center text-5xl sm:text-7xl">
-        Dümmer
-        <br />
-        geht immer
-      </h1>
-
-      {view === "choose" && (
-        <div className="animate-rise space-y-3">
-          {resume && (
-            <Panel className="mb-8 p-5">
-              <p className="label">Offenes Spiel</p>
-              <p className="mt-2 text-lg font-semibold">
-                Raum <span className="font-mono">{resume.roomCode}</span> als {resume.role === "host" ? "Spielleiter" : resume.name}
-              </p>
-              <div className="mt-4 flex gap-2">
-                <Button className="flex-1" onClick={() => router.push(`/room/${resume.roomCode}`)}>
-                  Weiterspielen <ArrowRight />
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    clearSession();
-                    setResume(null);
-                  }}
-                >
-                  Verwerfen
-                </Button>
-              </div>
-            </Panel>
-          )}
-          <Button size="lg" className="w-full" onClick={() => open("join")}>
-            <Users /> Spiel beitreten
-          </Button>
-          <Button size="lg" variant="secondary" className="w-full" onClick={() => open("create")}>
-            <Crown /> Spiel erstellen
-          </Button>
-        </div>
-      )}
-
-      {view !== "choose" && (
-        <Panel className="stripe animate-rise p-5 sm:p-7">
-          <h2 className="headline text-3xl">{view === "create" ? "Neues Spiel" : "Beitreten"}</h2>
-          <p className="mt-2 text-muted">
-            {view === "create" ? "Du bist der Spielleiter und siehst alle Lösungen." : "Gib deinen Namen und den Raumcode ein."}
-          </p>
-
-          <form onSubmit={submit} className="mt-6 space-y-5">
-            <Field label="Dein Name">
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={20}
-                autoFocus={!name}
-                autoComplete="nickname"
-                disabled={busy}
-                className="h-12 w-full rounded-xl border border-line bg-zinc-950/60 px-4 text-lg outline-none transition-colors placeholder:text-faint focus:border-accent"
-                placeholder={view === "create" ? "z. B. Jan" : "Wie sollen dich alle nennen?"}
-              />
-            </Field>
-
-            {view === "join" && (
-              <Field label="Raumcode">
-                <input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
-                  autoFocus={!!name && !code}
-                  autoCapitalize="characters"
-                  autoComplete="off"
-                  spellCheck={false}
-                  disabled={busy}
-                  className="h-16 w-full rounded-xl border border-line bg-zinc-950/60 px-4 text-center font-mono text-3xl font-bold tracking-[0.4em] uppercase outline-none transition-colors placeholder:text-line-strong focus:border-accent"
-                  placeholder="ABC123"
-                />
-              </Field>
-            )}
-
-            {error && <p className="font-medium text-bad">{error}</p>}
-
-            <div className="flex gap-2 pt-2">
-              <Button variant="ghost" onClick={() => open("choose")} disabled={busy}>
-                <ArrowLeft /> Zurück
-              </Button>
-              <Button type="submit" className="flex-1" disabled={busy}>
-                {busy ? <Spinner className="size-4 border-black/30 border-t-black" /> : view === "create" ? "Raum erstellen" : <>Beitreten <LogIn /></>}
-              </Button>
-            </div>
-          </form>
-        </Panel>
-      )}
+      <Title />
+      <div className="mt-12 animate-rise space-y-4">
+        {error && <p className="text-center font-medium text-bad">{ERRORS[error] ?? ERRORS.login}</p>}
+        <Button size="lg" className="w-full bg-[#5865F2] text-white hover:bg-[#4752c4]" onClick={() => window.location.assign("/auth/login")}>
+          <DiscordLogo /> Mit Discord anmelden
+        </Button>
+      </div>
     </main>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function DiscordLogo() {
   return (
-    <label className="block">
-      <span className="label mb-2 block">{label}</span>
-      {children}
-    </label>
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="size-5">
+      <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.6 1.3a18.3 18.3 0 0 0-5.5 0L8.6 3a19.7 19.7 0 0 0-4.9 1.5C.6 9.1-.3 13.7.1 18.2a19.9 19.9 0 0 0 6 3l1.3-2.1c-.7-.3-1.4-.6-2-1l.5-.4a14.2 14.2 0 0 0 12.2 0l.5.4c-.6.4-1.3.7-2 1l1.3 2.1a19.8 19.8 0 0 0 6-3c.5-5.2-.9-9.8-3.6-13.8ZM8 15.4c-1.2 0-2.2-1.1-2.2-2.4S6.8 10.6 8 10.6s2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z" />
+    </svg>
+  );
+}
+
+// Listens to the live show status while the dashboard is open.
+function useLive() {
+  const live = useRoomStore((s) => s.live);
+  useEffect(() => {
+    const socket = getSocket();
+    socket.on("live", (info) => useRoomStore.setState({ live: info }));
+    if (!socket.connected) socket.connect();
+    return () => {
+      socket.off("live");
+    };
+  }, []);
+  return live;
+}
+
+function LiveCard({ me }: { me: Me }) {
+  const live = useLive();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const start = () => {
+    setBusy(true);
+    getSocket().emit("createShow", (r) => {
+      if (r.ok) router.push("/show");
+      else {
+        setError(r.error ?? "Das hat nicht geklappt");
+        setBusy(false);
+      }
+    });
+  };
+
+  if (!live) {
+    return (
+      <Panel className="stripe flex min-h-40 items-center justify-center p-6">
+        <Spinner />
+      </Panel>
+    );
+  }
+
+  if (!live.active) {
+    return (
+      <Panel className="stripe p-6 sm:p-8">
+        <p className="label">Live</p>
+        <h2 className="headline mt-2 text-3xl sm:text-4xl">Gerade keine Show</h2>
+        {me.isHost ? (
+          <Button size="lg" className="mt-6 w-full sm:w-auto" disabled={busy} onClick={start}>
+            <Play /> Show starten
+          </Button>
+        ) : (
+          <p className="mt-3 text-muted">Sobald eine Quizshow startet, kannst du hier beitreten.</p>
+        )}
+        {error && <p className="mt-3 font-medium text-bad">{error}</p>}
+      </Panel>
+    );
+  }
+
+  const joined = live.playerIds?.includes(me.id);
+  const lobby = live.screen === "lobby";
+  return (
+    <Panel className="stripe relative overflow-hidden p-6 sm:p-8">
+      <div className="flex items-center gap-2">
+        <span className="size-2.5 animate-pulse rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
+        <p className="label">Live · {live.screen && SCREEN_LABELS[live.screen]}</p>
+      </div>
+      <h2 className="headline mt-2 text-4xl sm:text-5xl">Quizshow läuft</h2>
+      <p className="mt-2 text-muted">
+        Host: {live.host?.name} · {live.playerIds?.length ?? 0} Spieler
+      </p>
+      <div className="mt-6 flex flex-wrap gap-2">
+        {me.isHost ? (
+          <Button size="lg" onClick={() => router.push("/show")}>
+            <Crown /> Zur Show
+          </Button>
+        ) : joined ? (
+          <Button size="lg" onClick={() => router.push("/show")}>
+            Weiterspielen <ArrowRight />
+          </Button>
+        ) : lobby ? (
+          <Button size="lg" onClick={() => router.push("/show?join=1")}>
+            Beitreten <ArrowRight />
+          </Button>
+        ) : (
+          <Button size="lg" variant="secondary" onClick={() => router.push("/show")}>
+            <Eye /> Zuschauen
+          </Button>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function CopyLink({ url, label }: { url: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = url;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <Button variant="secondary" size="sm" onClick={copy}>
+      {copied ? <Check className="text-good" /> : <Copy />} {label}
+    </Button>
+  );
+}
+
+function Dashboard({ me }: { me: Me }) {
+  const router = useRouter();
+  const { data: stats } = useApi<PlayerStats>(`/api/players/${me.id}`);
+  const { data: board } = useApi<LeaderboardRow[]>("/api/leaderboard");
+
+  return (
+    <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:py-10">
+      <header className="mb-8 flex items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <Title small />
+        </div>
+        <Link href={`/stats/${me.id}`} className="flex items-center gap-3 rounded-xl px-2 py-1 hover:bg-surface">
+          <span className="hidden text-right sm:block">
+            <span className="block font-bold">{me.name}</span>
+            {me.isHost && <span className="block font-mono text-xs text-gold">Host</span>}
+          </span>
+          <Avatar name={me.name} src={me.avatar} className="size-10" />
+        </Link>
+        <a href="/auth/logout" title="Abmelden" className="grid size-10 place-items-center rounded-lg text-faint hover:bg-surface hover:text-white">
+          <LogOut className="size-4.5" />
+        </a>
+      </header>
+
+      <div className="space-y-4">
+        <LiveCard me={me} />
+
+        {me.isHost && (
+          <Panel className="flex flex-wrap items-center gap-2 p-4">
+            <PanelTitle className="mr-auto">Host</PanelTitle>
+            {me.overlayUrl && <CopyLink url={me.overlayUrl} label="OBS-Overlay-Link" />}
+            <Button variant="secondary" size="sm" onClick={() => router.push("/admin")}>
+              <Settings /> Fragen verwalten
+            </Button>
+          </Panel>
+        )}
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] [&>*]:min-w-0">
+          <Panel className="p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <PanelTitle>Deine Stats</PanelTitle>
+              <Link href={`/stats/${me.id}`} className="text-sm text-muted hover:text-white">
+                Alle Stats
+              </Link>
+            </div>
+            {stats ? <StatTiles stats={stats} /> : <p className="py-6 text-center text-muted">Noch keine Show gespielt.</p>}
+          </Panel>
+
+          <Panel className="p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <PanelTitle className="flex items-center gap-2">
+                <Trophy className="size-4 text-gold" /> Bestenliste
+              </PanelTitle>
+              <Link href="/stats" className="text-sm text-muted hover:text-white">
+                Ganze Liste
+              </Link>
+            </div>
+            {board ? (
+              board.length ? (
+                <LeaderboardTable rows={board.slice(0, 5)} meId={me.id} compact />
+              ) : (
+                <p className="py-6 text-center text-muted">Noch keine Show gespielt.</p>
+              )
+            ) : (
+              <div className="grid place-items-center py-6">
+                <Spinner />
+              </div>
+            )}
+          </Panel>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function Home() {
+  const { me, loading } = useMe();
+  if (loading) {
+    return (
+      <main className="grid min-h-dvh place-items-center">
+        <Spinner />
+      </main>
+    );
+  }
+  return me ? <Dashboard me={me} /> : <Login />;
+}
+
+export default function Page() {
+  return (
+    <Suspense>
+      <Home />
+    </Suspense>
   );
 }

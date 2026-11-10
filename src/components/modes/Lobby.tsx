@@ -2,23 +2,15 @@
 
 import { ButtonHTMLAttributes, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, GripVertical, Lock, Play, Plus, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Dices, GripVertical, Lock, Minus, Play, Plus, X } from "lucide-react";
 import { useGame, useRoomStore } from "@/lib/store";
 import { getSocket, hostAction } from "@/lib/socket";
-import { clearSession } from "@/lib/session";
-import { FINAL_MODE, MODE_ORDER, Mode, PLANNABLE_MODES, SCREEN_LABELS } from "@/types/game";
+import { FINAL_MODE, Mode, PLANNABLE_MODES, SCREEN_LABELS } from "@/types/game";
 import { cn } from "@/lib/utils";
 import { Button, Panel, PanelTitle } from "@/components/ui";
-import { CopyCode, ModeLayout } from "@/components/room/Shell";
+import { ModeLayout } from "@/components/room/Shell";
+import { Avatar } from "@/components/stats";
 
-const MODE_HINTS: Record<(typeof MODE_ORDER)[number], string> = {
-  lastManStanding: "Reihum Begriffe nennen. Wer nichts mehr weiß, fliegt.",
-  millionaire: "Multiple Choice. Je später die Frage, desto mehr Punkte.",
-  higherLower: "Werte auf der Skala richtig einordnen.",
-  geo: "Orte auf einer leeren Karte finden.",
-  pictures: "Bilder erkennen und buzzern. Je früher, desto mehr Punkte.",
-  jeopardy: "Kategorien wählen und buzzern.",
-};
 
 export default function Lobby() {
   const game = useGame();
@@ -28,53 +20,67 @@ export default function Lobby() {
   const isHost = role === "host";
   const players = [...game.players].sort((a, b) => a.name.localeCompare(b.name, "de"));
 
-  const empty = game.plan.filter((m) => game.poolCounts?.[m] === 0);
+  const random = game.randomCount !== null;
+  const empty = random ? [] : game.plan.filter((m) => game.poolCounts?.[m] === 0);
+  const playable = PLANNABLE_MODES.filter((m) => (game.poolCounts?.[m] ?? 1) > 0);
 
   const leave = () => {
-    getSocket().emit("leaveRoom");
-    clearSession();
+    getSocket().emit("leaveShow");
     router.replace("/");
   };
 
   return (
     <ModeLayout
+      fill
       actions={
         isHost ? (
+          <>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              if (confirm("Show abbrechen?")) {
+                hostAction({ type: "closeShow" });
+                router.replace("/");
+              }
+            }}
+          >
+            Abbrechen
+          </Button>
           <Button size="lg" className="w-full sm:w-auto" disabled={players.length === 0 || empty.length > 0} onClick={() => hostAction({ type: "start" })}>
             <Play />{" "}
             {empty.length > 0
               ? `Keine Inhalte für ${SCREEN_LABELS[empty[0]]}`
               : players.length === 0
                 ? "Warte auf Spieler"
-                : `Spiel starten mit ${players.length} ${players.length === 1 ? "Spieler" : "Spielern"}`}
+                : random
+                  ? `Auslosen und starten (${players.length} ${players.length === 1 ? "Spieler" : "Spieler"})`
+                  : `Spiel starten mit ${players.length} ${players.length === 1 ? "Spieler" : "Spielern"}`}
           </Button>
+          </>
         ) : undefined
       }
     >
-      {isHost ? (
-        <Panel className="stripe flex flex-col items-center gap-3 p-6 text-center sm:p-8">
-          <p className="label">Raumcode</p>
-          <CopyCode code={game.roomCode} large />
-          <p className="text-sm text-muted">Klick auf den Code kopiert einen Einladungslink für den Call.</p>
-        </Panel>
-      ) : (
-        <Panel className="stripe p-6 text-center">
-          <p className="headline text-4xl">Du bist dabei</p>
-          <p className="mt-3 text-muted">Sobald {game.hostName} startet, geht es los.</p>
-        </Panel>
-      )}
+      <Panel className="stripe flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-5 py-4">
+        <p className="headline text-2xl sm:text-3xl">{isHost ? "Warte auf Spieler" : role === "player" ? "Du bist dabei" : "Gleich geht's los"}</p>
+        <p className="text-sm text-muted">
+          {isHost ? "Alle auf dem Server sehen die Show auf der Startseite." : `Sobald ${game.host.name} startet, geht es los.`}
+        </p>
+      </Panel>
 
-      <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
-        <Panel className="p-4">
-          <PanelTitle className="mb-3">Spieler ({players.length})</PanelTitle>
+      <div className="grid gap-4 md:grid-cols-2 lg:min-h-0 lg:flex-1 [&>*]:min-w-0 lg:[&>*]:min-h-0 lg:[&>*]:overflow-y-auto">
+        <Panel className="scrollbar-thin p-4">
+          <PanelTitle className="mb-2">Spieler ({players.length})</PanelTitle>
           {players.length === 0 ? (
             <p className="label py-6 text-center">Noch niemand da</p>
           ) : (
-            <ul className="space-y-1.5">
+            <ul className="grid gap-1 sm:grid-cols-2">
               {players.map((p) => (
-                <li key={p.id} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${p.id === playerId ? "border-white/20 bg-white/10" : "border-transparent bg-black/20"}`}>
-                  <span className={`size-2 rounded-full ${p.connected ? "bg-good" : "bg-bad"}`} />
-                  <span className="flex-1 truncate text-lg font-bold uppercase italic">{p.name}</span>
+                <li key={p.id} className={`flex min-w-0 items-center gap-2.5 rounded-xl border py-1 pr-1 pl-2 ${p.id === playerId ? "border-white/20 bg-white/10" : "border-transparent bg-black/20"}`}>
+                  <span className="relative">
+                    <Avatar name={p.name} src={p.avatar} className="size-7" />
+                    <span className={`absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-zinc-900 ${p.connected ? "bg-good" : "bg-bad"}`} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-bold uppercase italic">{p.name}</span>
                   {p.id === playerId && <span className="font-mono text-xs text-faint">(du)</span>}
                   {isHost && (
                     <button
@@ -91,34 +97,73 @@ export default function Lobby() {
           )}
         </Panel>
 
-        <Panel className="p-4">
-          <PanelTitle className="mb-3">Ablauf</PanelTitle>
-          {isHost ? (
+        <Panel className="scrollbar-thin p-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <PanelTitle>Ablauf</PanelTitle>
+            {isHost && (
+              <div className="flex rounded-lg border border-line p-0.5 text-xs font-bold uppercase">
+                {[
+                  ["Selbst wählen", null],
+                  ["Auslosen", Math.min(3, playable.length)],
+                ].map(([label, count]) => (
+                  <button
+                    key={String(label)}
+                    type="button"
+                    onClick={() => hostAction({ type: "plan.random", count: count as number | null })}
+                    className={cn("rounded-md px-3 py-1.5", (count === null) === !random ? "bg-white text-black" : "text-muted hover:text-white")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {random ? (
+            <RandomSettings count={game.randomCount!} max={playable.length} isHost={isHost} />
+          ) : isHost ? (
             <PlanEditor plan={game.plan} counts={game.poolCounts} />
           ) : (
-            <ol className="space-y-3">
-              {game.plan.map((mode, i) => (
-                <li key={mode} className="flex gap-3">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-raised font-mono font-bold">{i + 1}</span>
-                  <span>
-                    <span className="block text-lg font-black uppercase italic">{SCREEN_LABELS[mode]}</span>
-                    <span className="block text-sm text-muted">{MODE_HINTS[mode]}</span>
-                  </span>
-                </li>
-              ))}
-            </ol>
+            // Players do not see the chosen games, the slot machine shows them at the start.
+            <div className="flex flex-col items-center gap-2 py-6 text-center">
+              <Dices className="size-8 text-accent-light" />
+              <p className="text-muted">Die Spiele werden zu Beginn enthüllt. Jeopardy ist immer das Finale.</p>
+            </div>
           )}
         </Panel>
       </div>
 
-      {!isHost && (
+      {role === "player" && (
         <div className="text-center">
           <Button variant="ghost" onClick={leave}>
-            Raum verlassen
+            Show verlassen
           </Button>
         </div>
       )}
     </ModeLayout>
+  );
+}
+
+// Drawn at the start: how many games before the Jeopardy final.
+function RandomSettings({ count, max, isHost }: { count: number; max: number; isHost: boolean }) {
+  return (
+    <div className="flex flex-col items-center gap-3 py-4 text-center">
+      <Dices className="size-8 text-accent-light" />
+      <p className="text-muted">Die Spiele werden beim Start zufällig ausgelost. Jeopardy ist immer das Finale.</p>
+      <div className="flex items-center gap-3">
+        {isHost && (
+          <IconButton title="Weniger" disabled={count <= 1} onClick={() => hostAction({ type: "plan.random", count: count - 1 })}>
+            <Minus />
+          </IconButton>
+        )}
+        <span className="headline text-4xl tabular-nums">{count}</span>
+        {isHost && (
+          <IconButton title="Mehr" disabled={count >= max} onClick={() => hostAction({ type: "plan.random", count: count + 1 })}>
+            <Plus />
+          </IconButton>
+        )}
+      </div>
+      <p className="label">{count === 1 ? "Spiel" : "Spiele"} + Jeopardy</p>
+    </div>
   );
 }
 
@@ -143,8 +188,8 @@ function PlanEditor({ plan, counts }: { plan: Mode[]; counts?: Record<Mode, numb
   };
 
   return (
-    <div className="space-y-3">
-      <ol className="space-y-1.5">
+    <div className="space-y-2">
+      <ol className="space-y-1">
         {chosen.map((mode, i) => (
           <li
             key={mode}
@@ -153,12 +198,12 @@ function PlanEditor({ plan, counts }: { plan: Mode[]; counts?: Record<Mode, numb
             onDragEnd={() => setDragging(null)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => dragging && dragging !== mode && move(dragging, i)}
-            className={cn("flex items-center gap-2 rounded-xl border border-line bg-black/20 py-2 pr-1.5 pl-2", dragging === mode && "opacity-50")}
+            className={cn("flex items-center gap-2 rounded-xl border border-line bg-black/20 py-1 pr-1.5 pl-2", dragging === mode && "opacity-50")}
           >
             <GripVertical className="hidden size-4 shrink-0 cursor-grab text-faint sm:block" />
             <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-raised font-mono text-sm font-bold">{i + 1}</span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-black uppercase italic">{SCREEN_LABELS[mode]}</span>
+            <span className="flex min-w-0 flex-1 items-baseline gap-2">
+              <span className="truncate font-black uppercase italic">{SCREEN_LABELS[mode]}</span>
               {countLabel(mode)}
             </span>
             <IconButton title="Nach oben" disabled={i === 0} onClick={() => move(mode, i - 1)}>
@@ -175,8 +220,8 @@ function PlanEditor({ plan, counts }: { plan: Mode[]; counts?: Record<Mode, numb
         <li className="flex items-center gap-2 rounded-xl border border-line bg-black/20 py-2 pr-3 pl-2">
           <Lock className="hidden size-4 shrink-0 text-faint sm:block" />
           <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-raised font-mono text-sm font-bold">{chosen.length + 1}</span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-black uppercase italic">{SCREEN_LABELS[FINAL_MODE]}</span>
+          <span className="flex min-w-0 flex-1 items-baseline gap-2">
+            <span className="truncate font-black uppercase italic">{SCREEN_LABELS[FINAL_MODE]}</span>
             {countLabel(FINAL_MODE)}
           </span>
           <span className="font-mono text-xs text-faint">Finale</span>

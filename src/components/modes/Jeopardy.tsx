@@ -5,7 +5,8 @@ import { ArrowRight, Bell, BellOff, Check, RotateCcw, Trash2, X } from "lucide-r
 import { cn } from "@/lib/utils";
 import { useGame, useRoomStore } from "@/lib/store";
 import { hostAction, playerAction } from "@/lib/socket";
-import { JeoState } from "@/types/game";
+import { JeoQuestion, JeoState, Player } from "@/types/game";
+import { Avatar } from "@/components/stats";
 import { Button, Panel, Pill } from "@/components/ui";
 import { ModeHeading, ModeLayout, Scoreboard, StatusBanner } from "@/components/room/Shell";
 
@@ -18,6 +19,9 @@ export default function Jeopardy() {
   const isHost = role === "host";
   const name = (id: string | null) => game.players.find((p) => p.id === id)?.name ?? "";
   const remaining = jeo.categories.reduce((n, c) => n + c.questions.filter((q) => q.status === "open").length, 0);
+  // Who answered the open question wrong: red cam and an X next to the name.
+  const activeQuestion = active ? jeo.categories[active.categoryIndex].questions[active.questionIndex] : null;
+  const wrongNow = new Set((activeQuestion?.attempts ?? []).filter((a) => !a.correct).map((a) => a.playerId));
 
   const canBuzz = !isHost && !!meId && !!active?.buzzerOpen && !active.answeringId && !active.tried.includes(meId);
   useEffect(() => {
@@ -34,7 +38,15 @@ export default function Jeopardy() {
 
   return (
     <ModeLayout
-      side={<Scoreboard players={game.players} meId={meId} turnId={active ? active.answeringId : jeo.chooserId} />}
+      board={
+        <Scoreboard
+          players={game.players}
+          meId={meId}
+          turnId={active ? active.answeringId : jeo.chooserId}
+          tone={(p) => (wrongNow.has(p.id) ? "bad" : null)}
+          tag={(p) => (wrongNow.has(p.id) ? <X className="size-3.5" strokeWidth={3} /> : null)}
+        />
+      }
       actions={
         isHost &&
         (active ? <HostQuestionActions jeo={jeo} /> : remaining === 0 ? (
@@ -55,7 +67,7 @@ export default function Jeopardy() {
           ) : (
             <StatusBanner>{name(jeo.chooserId)} wählt eine Frage</StatusBanner>
           )}
-          <Board jeo={jeo} isHost={isHost} name={name} />
+          <Board jeo={jeo} isHost={isHost} name={name} players={game.players} />
         </>
       ) : (
         <ActiveQuestion jeo={jeo} isHost={isHost} meId={meId} canBuzz={canBuzz} name={name} />
@@ -64,13 +76,43 @@ export default function Jeopardy() {
   );
 }
 
-function Board({ jeo, isHost, name }: { jeo: JeoState; isHost: boolean; name: (id: string | null) => string }) {
+// A played field: who picked it first, then everyone who answered, each with
+// a check or an X below. A picker who never answered gets a dash.
+function Attempts({ q, players, discarded }: { q: JeoQuestion; players: Player[]; discarded: boolean }) {
+  const attempts = q.attempts ?? [];
+  const list = q.chooserId && !attempts.some((a) => a.playerId === q.chooserId) ? [{ playerId: q.chooserId, correct: null as boolean | null }, ...attempts] : attempts;
+  if (!list.length) return discarded ? <X className="size-5 text-red-500/70" /> : <Check className="size-5" />;
+  return (
+    <span className="flex flex-wrap items-center justify-center gap-1.5">
+      {list.slice(0, 5).map((a, i) => {
+        const p = players.find((pl) => pl.id === a.playerId);
+        return (
+          <span key={i} className="flex flex-col items-center gap-0.5" title={p?.name}>
+            <Avatar name={p?.name ?? "?"} src={p?.avatar ?? null} className="size-6 text-[10px] lg:size-7" />
+            {a.correct === true ? (
+              <Check className="size-3.5 text-green-500" strokeWidth={3} />
+            ) : a.correct === false ? (
+              <X className="size-3.5 text-red-500" strokeWidth={3} />
+            ) : (
+              <span className="text-xs leading-none text-faint">–</span>
+            )}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+function Board({ jeo, isHost, name, players }: { jeo: JeoState; isHost: boolean; name: (id: string | null) => string; players: Player[] }) {
   const rows = Math.max(...jeo.categories.map((c) => c.questions.length));
   return (
     <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
       <div className="grid min-w-[520px] gap-1.5 sm:gap-2" style={{ gridTemplateColumns: `repeat(${jeo.categories.length}, minmax(0, 1fr))` }}>
         {jeo.categories.map((cat) => (
-          <div key={cat.name} className="flex min-h-12 items-end justify-center px-1 pb-1 text-center text-xs font-bold uppercase italic leading-tight sm:text-base">
+          <div
+            key={cat.name}
+            className="mb-1 flex min-h-12 items-center justify-center rounded-lg border border-red-400/60 bg-gradient-to-b from-red-600 to-red-800 px-2 py-2 text-center text-xs leading-tight font-black uppercase shadow-[0_0_16px_rgba(220,38,38,0.45)] sm:text-sm lg:text-base"
+          >
             {cat.name}
           </div>
         ))}
@@ -86,12 +128,17 @@ function Board({ jeo, isHost, name }: { jeo: JeoState; isHost: boolean; name: (i
                 onClick={() => hostAction({ type: "jeo.select", categoryIndex: ci, questionIndex: qi })}
                 title={q.answeredBy ? `Beantwortet von ${name(q.answeredBy)}` : undefined}
                 className={cn(
-                  "grid aspect-[4/3] place-items-center rounded-xl border-2 text-xl font-black italic tabular-nums transition-all sm:text-4xl",
-                  open ? "border-blue-400 bg-blue-600 text-white shadow-lg" : q.status === "discarded" ? "border-red-900/50 bg-bad-soft text-red-500/70" : "border-line bg-zinc-950 text-line-strong",
-                  open && isHost && "hover:scale-105 hover:bg-blue-500 active:scale-95",
+                  // Height follows the screen so the whole board fits above the cams.
+                  "headline grid h-[clamp(40px,8vh,84px)] place-items-center rounded-lg border text-xl tabular-nums transition-all sm:text-3xl",
+                  open
+                    ? "border-blue-400/70 bg-gradient-to-b from-blue-600 to-blue-900 text-white shadow-[0_0_14px_rgba(59,130,246,0.4)]"
+                    : q.status === "discarded"
+                      ? "border-red-900/50 bg-bad-soft text-red-500/70"
+                      : "border-line bg-zinc-900/60 text-line-strong",
+                  open && isHost && "hover:brightness-125 active:scale-95",
                 )}
               >
-                {open ? q.points : q.status === "discarded" ? <X className="size-5" /> : <Check className="size-5" />}
+                {open ? q.points : <Attempts q={q} players={players} discarded={q.status === "discarded"} />}
               </button>
             );
           }),
@@ -116,10 +163,16 @@ function ActiveQuestion({
 }) {
   const active = jeo.active!;
   const question = jeo.categories[active.categoryIndex].questions[active.questionIndex];
-  const halved = active.points < active.originalPoints;
+  const last = question.attempts?.at(-1);
 
   let status;
   if (active.answeringId === meId) status = <StatusBanner tone="accent">Du antwortest jetzt!</StatusBanner>;
+  else if (!active.answeringId && last && !last.correct)
+    status = (
+      <StatusBanner tone="bad">
+        {last.playerId === meId ? "Du lagst" : `${name(last.playerId)} lag`} falsch, −{active.penalty} · {active.buzzerOpen ? "Buzzer ist offen" : "Buzzer ist zu"}
+      </StatusBanner>
+    );
   else if (active.answeringId) status = <StatusBanner>{name(active.answeringId)} {active.firstAttempt ? "darf zuerst antworten" : "hat gebuzzert"}</StatusBanner>;
   else if (active.buzzerOpen) status = <StatusBanner tone="good">Buzzer ist offen</StatusBanner>;
   else status = <StatusBanner>Buzzer ist geschlossen</StatusBanner>;
@@ -127,9 +180,11 @@ function ActiveQuestion({
   return (
     <>
       <Panel key={question.id} className="stripe animate-pop border-blue-800 bg-gradient-to-br from-blue-900 to-black p-6 text-center sm:p-10">
-        <div className="mb-4 flex justify-center gap-2">
-          {halved && <Pill className="line-through">{active.originalPoints}</Pill>}
-          <Pill tone="accent">{active.points} Punkte</Pill>
+        <div className="mb-4 flex justify-center">
+          <span className="headline inline-flex items-baseline gap-2 rounded-lg border-2 border-yellow-500/80 bg-black/40 px-3 py-1 text-xl text-yellow-400 shadow-[0_0_14px_rgba(234,179,8,0.25)]">
+            {active.points < active.originalPoints && <span className="text-base text-yellow-200/50 line-through decoration-2">{active.originalPoints}</span>}
+            {active.points} Punkte
+          </span>
         </div>
         <p className="text-2xl font-bold leading-snug sm:text-4xl">{question.question}</p>
         {isHost && (
@@ -139,7 +194,7 @@ function ActiveQuestion({
 
       {status}
 
-      {!isHost && (active.buzzerOpen || active.tried.includes(meId ?? "")) && (
+      {!!meId && (active.buzzerOpen || active.tried.includes(meId ?? "")) && (
         <button
           disabled={!canBuzz}
           onPointerDown={() => canBuzz && playerAction({ type: "jeo.buzz" })}

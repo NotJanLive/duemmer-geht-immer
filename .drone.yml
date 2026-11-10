@@ -23,6 +23,14 @@ steps:
     environment:
       ADMIN_PASSWORD:
         from_secret: admin_password
+      SESSION_SECRET:
+        from_secret: session_secret
+      DISCORD_CLIENT_ID:
+        from_secret: discord_client_id
+      DISCORD_CLIENT_SECRET:
+        from_secret: discord_client_secret
+      DISCORD_BOT_TOKEN:
+        from_secret: discord_bot_token
     commands:
       - docker ps
       - docker volume create duemmer_geht_immer
@@ -40,6 +48,14 @@ steps:
           -e NODE_ENV=production \
           -e DATA_DIR=/data \
           -e ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+          -e SESSION_SECRET="$SESSION_SECRET" \
+          -e DISCORD_CLIENT_ID="$DISCORD_CLIENT_ID" \
+          -e DISCORD_CLIENT_SECRET="$DISCORD_CLIENT_SECRET" \
+          -e DISCORD_BOT_TOKEN="$DISCORD_BOT_TOKEN" \
+          -e DISCORD_GUILD_ID=1355322631641104385 \
+          -e DISCORD_WINNER_ROLE_ID=1361337620403322882 \
+          -e PUBLIC_URL=https://quiz.notjan.de \
+          -e BOT_WINNER=on \
           -v duemmer_geht_immer:/app \
           -v duemmer_geht_immer_data:/data \
           -w /app \

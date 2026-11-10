@@ -186,3 +186,33 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* Cam tile points: a short pop in green or red and the floating delta. */
+@keyframes points-up { 0% { transform: scale(1); } 30% { transform: scale(1.35); color: #86efac; } 100% { transform: scale(1); } }
+@keyframes points-down { 0% { transform: scale(1); } 30% { transform: scale(0.8); color: #fca5a5; } 100% { transform: scale(1); } }
+@keyframes points-float { 0% { opacity: 0; transform: translateY(6px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(-4px); } }
+.points-up { animation: points-up 0.7s ease-out; }
+.points-down { animation: points-down 0.7s ease-out; }
+.points-float { animation: points-float 1.3s ease-out forwards; pointer-events: none; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); }
+
+.scrollbar-thin { scrollbar-width: thin; scrollbar-color: #3f3f46 transparent; }
+
+/* Fills the free height of a `fill` stage; children size themselves with
+   var(--fit-h) (map, picture). Phones keep the vh fallback. */
+@media (min-width: 1024px) {
+  .fit-box { container-type: size; --fit-h: 100cqh; flex: 1 1 0; min-height: 10rem; }
+}
+
+/* Slot machine: a reel's frame flashes once when it stops, then stays lit. */
+@keyframes draw-flash {
+  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); border-color: #fff; background-color: rgba(59, 130, 246, 0.35); }
+  35% { box-shadow: 0 0 34px 6px rgba(96, 165, 250, 0.9); border-color: #fff; }
+  100% { box-shadow: 0 0 18px rgba(59, 130, 246, 0.45); }
+}
+@keyframes draw-flash-gold {
+  0% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0); transform: scale(0.96); }
+  35% { box-shadow: 0 0 44px 8px rgba(250, 204, 21, 0.85); transform: scale(1.03); }
+  100% { box-shadow: 0 0 28px rgba(234, 179, 8, 0.35); transform: none; }
+}
+.draw-flash { animation: draw-flash 0.7s ease-out both; }
+.draw-flash-gold { animation: draw-flash-gold 0.8s ease-out both; }

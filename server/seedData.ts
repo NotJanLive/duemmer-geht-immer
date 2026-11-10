@@ -212,3 +212,84 @@ export const geoData = [
     ],
   },
 ];
+
+// Songrätsel starter category (iTunes track data, 2026-11-10).
+export const songData = [
+  {
+    name: 'Hits, die jeder kennt',
+    songs: [
+      {
+        "trackId": 1526194192,
+        "title": "Mr. Brightside",
+        "artist": "The Killers",
+        "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/07/1a/5a/071a5aee-6e42-060c-35b9-6a6e45b9ea59/06UMGIM10441.rgb.jpg/300x300bb.jpg",
+        "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/5b/17/4e/5b174e80-1047-7214-1077-d822ba1f9520/mzaf_5975692497663881329.plus.aac.p.m4a",
+        "offset": 0
+      },
+      {
+        "trackId": 1193700923,
+        "title": "Shape of You",
+        "artist": "Ed Sheeran",
+        "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/20/03/4c/20034cdb-b2b1-74a7-2ec0-521ccf471bbd/190295851286.jpg/300x300bb.jpg",
+        "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/c8/a1/35/c8a1354a-28aa-639f-0d5a-ff843069a4b7/mzaf_7018698804833750599.plus.aac.p.m4a",
+        "offset": 0
+      },
+      {
+        "trackId": 6781027645,
+        "title": "Bohemian Rhapsody",
+        "artist": "Queen",
+        "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/62/2e/97/622e97c4-d620-2ae1-2a47-a32e16a01492/602567988847.jpg/300x300bb.jpg",
+        "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/44/10/de/4410de9b-4b10-c763-baf8-c4911c032248/mzaf_3700911105004619705.plus.aac.p.m4a",
+        "offset": 0
+      },
+      {
+        "trackId": 336644237,
+        "title": "Billie Jean (Single Version)",
+        "artist": "Michael Jackson",
+        "cover": "https://is1-ssl.mzstatic.com/image/thumb/Features125/v4/2a/82/a5/2a82a59b-6e79-7c39-761a-c1d3b82e93cb/dj.dzbxcmnk.jpg/300x300bb.jpg",
+        "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/a0/20/1b/a0201bf3-e6a7-f2fc-a836-a536593c3e51/mzaf_3717140176449046337.plus.aac.p.m4a",
+        "offset": 0
+      },
+      {
+        "trackId": 1586410661,
+        "title": "Smells Like Teen Spirit (Remastered)",
+        "artist": "Nirvana",
+        "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/5c/53/5d/5c535d31-9c80-c752-3ea3-887615eb7d51/21UM1IM09416.rgb.jpg/300x300bb.jpg",
+        "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/b0/36/9c/b0369c24-5047-1f93-a228-64ecec779cdc/mzaf_17479720470163953122.plus.aac.p.m4a",
+        "offset": 0
+      },
+      {
+        "trackId": 403037877,
+        "title": "Rolling In the Deep",
+        "artist": "Adele",
+        "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/f8/df/0a/f8df0ac9-ae76-9dae-86d3-4e913fc54fb1/634904152062.png/300x300bb.jpg",
+        "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/84/ab/e5/84abe549-c9d6-3de2-cdd0-90e9256a637e/mzaf_7958095177960014950.plus.aac.p.m4a",
+        "offset": 0
+      },
+      {
+        "trackId": 943946671,
+        "title": "Uptown Funk (feat. Bruno Mars)",
+        "artist": "Mark Ronson",
+        "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/7e/30/c5/7e30c572-aa47-5f7b-c6fd-42d50cd2c56d/886444959797.jpg/300x300bb.jpg",
+        "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/91/99/1f/91991fe5-aa77-87e4-edbc-6d68c95e5f18/mzaf_10685317694850942114.plus.aac.p.m4a",
+        "offset": 0
+      },
+      {
+        "trackId": 1544490669,
+        "title": "Atemlos durch die Nacht",
+        "artist": "Helene Fischer",
+        "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/70/47/d8/7047d8cd-f85a-a37f-5ee5-0e54438f8595/13UAAIM81444.rgb.jpg/300x300bb.jpg",
+        "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/be/62/9f/be629f52-58c9-c5e9-a871-b25c826cfe9d/mzaf_11136940745057536408.plus.aac.p.m4a",
+        "offset": 0
+      },
+      {
+        "trackId": 1533513537,
+        "title": "Seven Nation Army",
+        "artist": "The White Stripes",
+        "cover": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/07/25/09/0725098a-09f4-f240-e551-94384a590371/886448799009.jpg/300x300bb.jpg",
+        "preview": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/fe/2d/58/fe2d587f-6344-3fb3-43f7-d318a6253dcc/mzaf_16825320951570507954.plus.aac.p.m4a",
+        "offset": 0
+      }
+    ],
+  },
+];

@@ -6,6 +6,31 @@ import { useGame, useRoomStore } from "@/lib/store";
 import { hostAction, playerAction } from "@/lib/socket";
 import { Button, Panel, Pill } from "@/components/ui";
 import { ModeHeading, ModeLayout, Scoreboard, StatusBanner } from "@/components/room/Shell";
+import { Avatar } from "@/components/stats";
+import { Player, WwmState } from "@/types/game";
+import { useState } from "react";
+
+// Same result the server computes, for the host's instant reveal.
+function revealLocally(wwm: WwmState): WwmState {
+  const answers = Object.fromEntries(
+    Object.entries(wwm.answers).map(([id, a]) => [id, { ...a, correct: a.locked && a.answer === wwm.question.correctAnswer }]),
+  );
+  return { ...wwm, answers, revealed: true };
+}
+
+function Pickers({ players }: { players: Player[] }) {
+  if (!players.length) return null;
+  return (
+    <span className="flex shrink-0 -space-x-2">
+      {players.slice(0, 8).map((p) => (
+        <span key={p.id} title={p.name} className="animate-pop rounded-full ring-2 ring-zinc-900">
+          <Avatar name={p.name} src={p.avatar} className="size-7 text-xs" />
+        </span>
+      ))}
+      {players.length > 8 && <span className="grid size-7 place-items-center rounded-full bg-raised text-xs font-bold ring-2 ring-zinc-900">+{players.length - 8}</span>}
+    </span>
+  );
+}
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 
@@ -13,7 +38,10 @@ export default function Millionaire() {
   const game = useGame();
   const role = useRoomStore((s) => s.role);
   const meId = useRoomStore((s) => s.playerId);
-  const wwm = game.wwm!;
+  const server = game.wwm!;
+  // The host shows the reveal at once instead of waiting for the round trip.
+  const [revealing, setRevealing] = useState<number | null>(null);
+  const wwm = revealing === server.index && !server.revealed ? revealLocally(server) : server;
   const q = wwm.question;
   const isHost = role === "host";
   const mine = meId ? wwm.answers[meId] : undefined;
@@ -30,6 +58,15 @@ export default function Millionaire() {
     return "idle";
   };
 
+  // Who picked which answer: the host sees it live, everyone else after the reveal.
+  const pickers = (i: number) =>
+    isHost || wwm.revealed
+      ? game.players.filter((p) => {
+          const a = wwm.answers[p.id];
+          return a?.answer === i && (isHost || a.locked);
+        })
+      : [];
+
   let banner = null;
   if (!isHost) {
     if (wwm.revealed) {
@@ -45,37 +82,44 @@ export default function Millionaire() {
 
   return (
     <ModeLayout
-      side={
+      board={
         <Scoreboard
           players={game.players}
           meId={meId}
           tone={(p) => (wwm.revealed ? (wwm.answers[p.id]?.correct ? "good" : "bad") : null)}
-          note={(p) => {
+          tag={(p) => {
             const a = wwm.answers[p.id];
             if (wwm.revealed) {
-              if (!a?.locked || a.answer === null) return <span className="inline-flex items-center gap-1 font-bold uppercase text-red-500"><X className="size-3.5" /> Keine Antwort</span>;
-              return a.correct ? (
-                <span className="inline-flex items-center gap-1 font-bold uppercase text-green-500"><Check className="size-3.5" /> Richtig ({LETTERS[a.answer]})</span>
-              ) : (
-                <span className="inline-flex items-center gap-1 font-bold uppercase text-red-500"><X className="size-3.5" /> Falsch ({LETTERS[a.answer]})</span>
+              if (!a?.locked || a.answer === null) return <X className="size-3.5" strokeWidth={3} />;
+              return (
+                <span className="inline-flex items-center gap-0.5">
+                  {a.correct ? <Check className="size-3.5" strokeWidth={3} /> : <X className="size-3.5" strokeWidth={3} />}
+                  {LETTERS[a.answer]}
+                </span>
               );
             }
             if (a?.locked) {
               return (
-                <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-600/20 px-2 py-0.5 text-xs font-bold uppercase text-green-500">
-                  <Lock className="size-3" /> Eingeloggt{isHost && a.answer != null ? ` (${LETTERS[a.answer]})` : ""}
+                <span className="inline-flex items-center gap-0.5 text-green-400">
+                  <Lock className="size-3.5" strokeWidth={3} />
+                  {isHost && a.answer != null && LETTERS[a.answer]}
                 </span>
               );
             }
-            if (isHost && a?.answer != null) return `Wählt gerade ${LETTERS[a.answer]}`;
-            return "Überlegt noch";
+            if (isHost && a?.answer != null) return <span className="opacity-60">{LETTERS[a.answer]}</span>;
+            return null;
           }}
         />
       }
       actions={
         isHost ? (
           !wwm.revealed ? (
-            <Button onClick={() => hostAction({ type: "wwm.reveal" })}>
+            <Button
+              onClick={() => {
+                setRevealing(wwm.index);
+                hostAction({ type: "wwm.reveal" });
+              }}
+            >
               <Eye /> Auflösen ({lockedCount} / {game.players.length} eingeloggt)
             </Button>
           ) : isLast ? (
@@ -87,14 +131,7 @@ export default function Millionaire() {
               Nächste Frage <ArrowRight />
             </Button>
           )
-        ) : (
-          !wwm.revealed &&
-          !mine?.locked && (
-            <Button size="lg" className="w-full sm:w-auto" disabled={mine?.answer == null} onClick={() => playerAction({ type: "wwm.lock" })}>
-              <Lock /> Antwort einloggen
-            </Button>
-          )
-        )
+        ) : undefined
       }
     >
       <ModeHeading
@@ -115,7 +152,7 @@ export default function Millionaire() {
       <div className="grid gap-2.5 sm:grid-cols-2">
         {q.options.map((option, i) => {
           const state = optionState(i);
-          const clickable = !isHost && !wwm.revealed && !mine?.locked;
+          const clickable = !!meId && !wwm.revealed && !mine?.locked;
           return (
             <button
               key={i}
@@ -142,11 +179,21 @@ export default function Millionaire() {
               >
                 {state === "correct" ? <Check className="size-4" /> : state === "wrong" ? <X className="size-4" /> : LETTERS[i]}
               </span>
-              {option}
+              <span className="min-w-0 flex-1">{option}</span>
+              <Pickers players={pickers(i)} />
             </button>
           );
         })}
       </div>
+
+      {/* Next to the answers, so nothing moves the cams below. */}
+      {!!meId && !wwm.revealed && !mine?.locked && (
+        <div className="flex justify-center">
+          <Button size="lg" className="w-full sm:w-auto" disabled={mine?.answer == null} onClick={() => playerAction({ type: "wwm.lock" })}>
+            <Lock /> Antwort einloggen
+          </Button>
+        </div>
+      )}
     </ModeLayout>
   );
 }

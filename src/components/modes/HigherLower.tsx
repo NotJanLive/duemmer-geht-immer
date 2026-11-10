@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, Heart, Minus, Plus, SkipForward, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGame, useRoomStore } from "@/lib/store";
@@ -10,11 +10,11 @@ import { Button, Panel, PanelTitle, Pill } from "@/components/ui";
 import { ModeHeading, ModeLayout, Scoreboard, StatusBanner } from "@/components/room/Shell";
 
 
-function Lives({ count }: { count: number }) {
+function Lives({ count, small }: { count: number; small?: boolean }) {
   return (
     <span className="inline-flex gap-0.5 align-middle" title={`${count} von ${HOL_MAX_LIVES} Leben`}>
       {Array.from({ length: HOL_MAX_LIVES }, (_, i) => (
-        <Heart key={i} className={cn("size-4", i < count ? "fill-bad text-bad" : "text-faint")} />
+        <Heart key={i} className={cn(small ? "size-3.5" : "size-4", i < count ? "fill-red-500 text-red-500" : "text-white/50")} />
       ))}
     </span>
   );
@@ -29,7 +29,8 @@ function ScaleEnd({ icon, text }: { icon: ReactNode; text: string }) {
   );
 }
 
-const formatValue = (value: number | null) => (value === null ? "?" : value.toLocaleString("de-DE"));
+// No thousands dot below 10 000, so years read 1997, not 1.997.
+const formatValue = (value: number | null) => (value === null ? "?" : value.toLocaleString("de-DE", { useGrouping: Math.abs(value) >= 10000 }));
 
 export default function HigherLower() {
   const game = useGame();
@@ -45,6 +46,22 @@ export default function HigherLower() {
   const scale = round.items.filter((i) => i.placed).sort((a, b) => (a.value ?? 0) - (b.value ?? 0));
   const solution = isHost ? [...round.items].sort((a, b) => (a.value ?? 0) - (b.value ?? 0)) : [];
   const isLastRound = hol.roundIndex === hol.rounds.length - 1;
+
+  // The newest item on the scale is highlighted and scrolled into view.
+  const listRef = useRef<HTMLOListElement>(null);
+  const seen = useRef<Set<string> | null>(null);
+  const [lastPlaced, setLastPlaced] = useState<string | null>(null);
+  const placedIds = scale.map((i) => i.id).join(",");
+  useEffect(() => {
+    const ids = placedIds ? placedIds.split(",") : [];
+    const before = seen.current;
+    seen.current = new Set(ids);
+    if (!before) return;
+    const added = ids.find((id) => !before.has(id));
+    if (!added) return;
+    setLastPlaced(added);
+    requestAnimationFrame(() => listRef.current?.querySelector(`[data-id="${added}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+  }, [placedIds]);
   const everyoneOut = game.players.every((p) => lives(p.id) === 0);
 
   let banner;
@@ -56,13 +73,14 @@ export default function HigherLower() {
 
   return (
     <ModeLayout
-      side={
+      fill
+      board={
         <Scoreboard
           players={game.players}
           meId={meId}
           turnId={round.currentPlayerId}
           dimmed={(p) => lives(p.id) === 0}
-          note={(p) => <Lives count={lives(p.id)} />}
+          tag={(p) => (lives(p.id) === 0 ? <span className="normal-case">raus</span> : <Lives count={lives(p.id)} small />)}
           controls={
             isHost
               ? (p) => (
@@ -108,20 +126,20 @@ export default function HigherLower() {
       {banner}
 
       {open.length > 0 && (
-        <Panel className="p-4">
-          <PanelTitle className="mb-3">{isHost ? "Noch offen. Antippen, um es auf die Skala zu legen." : "Noch offen"}</PanelTitle>
-          <div className="flex flex-wrap gap-2">
+        <Panel className="p-3">
+          <PanelTitle className="mb-2">Noch offen</PanelTitle>
+          <div className="flex flex-wrap gap-1.5">
             {open.map((item) =>
               isHost ? (
                 <button
                   key={item.id}
                   onClick={() => hostAction({ type: "hol.place", itemId: item.id })}
-                  className="rounded-xl border border-line-strong bg-raised px-4 py-2.5 text-lg font-bold uppercase italic transition-colors hover:border-white"
+                  className="rounded-lg border border-line-strong bg-raised px-3 py-1.5 font-bold uppercase italic transition-colors hover:border-white"
                 >
                   {item.label} <span className="ml-1 font-mono text-sm not-italic text-faint tabular-nums">{formatValue(item.value)}</span>
                 </button>
               ) : (
-                <span key={item.id} className="rounded-xl border border-line-strong bg-raised px-4 py-2.5 text-lg font-bold uppercase italic">
+                <span key={item.id} className="rounded-lg border border-line-strong bg-raised px-3 py-1.5 font-bold uppercase italic">
                   {item.label}
                 </span>
               ),
@@ -130,24 +148,31 @@ export default function HigherLower() {
         </Panel>
       )}
 
-      <Panel className="stripe p-4 pt-5">
-        <PanelTitle className="mb-3">Skala</PanelTitle>
+      <Panel className="stripe flex min-h-40 flex-col p-3 pt-4 lg:min-h-32 lg:flex-1">
         <ScaleEnd icon={<ArrowUp />} text="Niedrigster Wert" />
-        <ol className="my-2 space-y-1.5">
+        {/* Fixed height: a long scale scrolls inside, the page does not. */}
+        <ol ref={listRef} className="scrollbar-thin my-1.5 max-h-[50vh] min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 lg:max-h-none">
           {scale.map((item, i) => (
-            <li key={item.id} className="flex animate-pop items-center gap-3 rounded-xl border border-accent/30 bg-accent-soft px-3 py-2.5">
-              <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-accent-strong font-mono text-sm font-bold">{i + 1}</span>
-              <span className="min-w-0 flex-1 text-lg font-bold uppercase italic">
+            <li
+              key={item.id}
+              data-id={item.id}
+              className={cn(
+                "flex animate-pop items-center gap-3 rounded-lg border px-3 py-1.5",
+                item.id === lastPlaced ? "border-accent bg-accent-strong/40" : "border-accent/30 bg-accent-soft",
+              )}
+            >
+              <span className="grid size-6 shrink-0 place-items-center rounded-md bg-accent-strong font-mono text-xs font-bold">{i + 1}</span>
+              <span className="min-w-0 flex-1 font-bold uppercase italic">
                 {item.label}
                 {item.initial && <span className="ml-2 font-mono text-xs font-normal not-italic normal-case text-faint">Startwert</span>}
               </span>
-              <span className="text-xl font-black italic whitespace-nowrap tabular-nums">
+              <span className="text-lg font-black italic whitespace-nowrap tabular-nums">
                 {formatValue(item.value)} <span className="hidden font-mono text-xs font-normal not-italic text-muted sm:inline">{round.unit}</span>
               </span>
               {isHost && !item.initial && (
                 <button
                   onClick={() => hostAction({ type: "hol.unplace", itemId: item.id })}
-                  className="grid size-8 place-items-center rounded-lg text-faint hover:bg-bad-soft hover:text-bad"
+                  className="grid size-7 place-items-center rounded-md text-faint hover:bg-bad-soft hover:text-bad"
                   title="Zurücknehmen"
                 >
                   <X className="size-4" />
@@ -160,8 +185,8 @@ export default function HigherLower() {
       </Panel>
 
       {isHost && (
-        <Panel className="p-4">
-          <PanelTitle className="mb-3">Richtige Reihenfolge (nur für dich)</PanelTitle>
+        <Panel className="p-3">
+          <PanelTitle className="mb-2">Richtige Reihenfolge</PanelTitle>
           <div className="flex flex-wrap gap-1.5">
             {solution.map((item, i) => (
               <span key={item.id} className={cn("rounded-lg border px-2.5 py-1 font-mono text-sm", item.placed ? "border-green-500 bg-green-600 text-white" : "border-line bg-surface text-faint")}>

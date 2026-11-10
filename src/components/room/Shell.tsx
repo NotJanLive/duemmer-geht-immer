@@ -1,42 +1,88 @@
 "use client";
 
-import { ReactNode, useState } from "react";
-import { Check, Copy, WifiOff } from "lucide-react";
+import { ReactNode, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import Link from "next/link";
+import { Users, Volume2, VolumeX, WifiOff } from "lucide-react";
+import { setSoundOn, soundOn, unlockAudio } from "@/lib/sounds";
+import { AnimatedPoints } from "@/components/room/Cams";
 import { cn } from "@/lib/utils";
-import { useRoomStore } from "@/lib/store";
-import { Player, SCREEN_LABELS } from "@/types/game";
+import { useBoardStore, useHeaderStore, useRoomStore } from "@/lib/store";
+import { Mode, Player, SCREEN_LABELS } from "@/types/game";
 import { Panel, PanelTitle, Pill } from "@/components/ui";
 
-export function TopBar() {
+export function TopBar({ overlay = false }: { overlay?: boolean }) {
   const state = useRoomStore((s) => s.state!);
   const role = useRoomStore((s) => s.role);
-  const playerId = useRoomStore((s) => s.playerId);
-  const me = state.players.find((p) => p.id === playerId);
   const online = state.players.filter((p) => p.connected).length;
 
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-black/90 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
-        <div className="min-w-0 flex-1">
-          <p className="headline truncate pr-1 text-xl sm:text-2xl">{SCREEN_LABELS[state.screen]}</p>
-          <p className="truncate text-xs font-semibold text-muted">Dümmer geht Immer</p>
-        </div>
-        {role === "host" ? (
-          <div className="flex items-center gap-2">
-            <Pill className="hidden sm:inline-flex">
-              {online} / {state.players.length} online
-            </Pill>
-            <CopyCode code={state.roomCode} />
-          </div>
-        ) : (
-          <div className="min-w-0 text-right">
-            <p className="truncate font-bold">{me?.name}</p>
-            <p className="font-mono text-xs text-muted">Raum {state.roomCode}</p>
-          </div>
+    <header className="z-30 shrink-0 border-b border-line bg-black/90 backdrop-blur-md">
+      <div className="mx-auto flex h-14 max-w-[1800px] items-center gap-3 px-4">
+        <Link href="/" className="hidden shrink-0 text-xs font-semibold text-muted hover:text-white sm:block">
+          Dümmer geht Immer
+        </Link>
+        <span className="hidden h-5 w-px bg-line sm:block" />
+        <p className="headline min-w-0 flex-1 truncate pr-1 text-xl sm:text-2xl">{SCREEN_LABELS[state.screen]}</p>
+        {state.plan.length > 0 && state.screen !== "lobby" && state.screen !== "draw" && <PlanProgress plan={state.plan} current={state.modeIndex} done={state.screen === "finale"} />}
+        {role === "host" && (
+          <span className="hidden items-center gap-1.5 text-sm font-semibold text-muted sm:flex" title="Spieler online">
+            <Users className="size-4" />
+            <span className="tabular-nums">
+              {online}/{state.players.length}
+            </span>
+          </span>
         )}
+        {role === "viewer" && !overlay && <Pill>Zuschauer</Pill>}
+        {!overlay && <SoundToggle />}
       </div>
       <ConnectionNotice />
     </header>
+  );
+}
+
+// The show's modes as segments: done, current (with its number), still to come.
+function PlanProgress({ plan, current, done }: { plan: Mode[]; current: number; done: boolean }) {
+  const at = done ? plan.length : Math.max(current, 0);
+  const info = useHeaderStore((s) => s.info);
+  return (
+    <div className="flex flex-col items-end gap-1">
+    <div className="flex items-center gap-2" title={plan.map((m) => SCREEN_LABELS[m]).join(" → ")}>
+      <div className="hidden gap-1 sm:flex">
+        {plan.map((m, i) => (
+          <span
+            key={m}
+            title={SCREEN_LABELS[m]}
+            className={cn("h-1.5 w-7 rounded-full", i < at ? "bg-white/70" : i === at ? "bg-accent shadow-[0_0_8px_rgba(59,130,246,0.8)]" : "bg-raised")}
+          />
+        ))}
+      </div>
+      <span className="font-mono text-sm text-muted tabular-nums">
+        {done ? "Finale" : `Spiel ${at + 1}/${plan.length}`}
+      </span>
+    </div>
+      {info && <span className="max-w-[50vw] truncate font-mono text-[11px] tracking-wide text-faint uppercase">{info}</span>}
+    </div>
+  );
+}
+
+function SoundToggle() {
+  const [on, setOn] = useState(true);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => setOn(soundOn()), []);
+  return (
+    <button
+      type="button"
+      title={on ? "Ton aus" : "Ton an"}
+      onClick={() => {
+        setSoundOn(!on);
+        setOn(!on);
+        unlockAudio();
+      }}
+      className="grid size-8 place-items-center rounded-lg text-muted hover:bg-surface hover:text-white [&_svg]:size-4.5"
+    >
+      {on ? <Volume2 /> : <VolumeX />}
+    </button>
   );
 }
 
@@ -52,61 +98,52 @@ function ConnectionNotice() {
       </div>
     );
   }
-  if (role === "player" && !hostConnected) {
-    return <div className="border-t border-line bg-raised px-4 py-2 text-center text-sm text-muted">Der Spielleiter ist gerade offline.</div>;
+  if (role !== "host" && !hostConnected) {
+    return <div className="border-t border-line bg-raised px-4 py-2 text-center text-sm text-muted">Der Host ist gerade offline.</div>;
   }
   return null;
 }
 
-// Copies an invite link. Clipboard needs a secure context, so fall back to the old API.
-export function CopyCode({ code, large }: { code: string; large?: boolean }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    const link = `${window.location.origin}/?code=${code}`;
-    try {
-      await navigator.clipboard.writeText(link);
-    } catch {
-      const area = document.createElement("textarea");
-      area.value = link;
-      document.body.appendChild(area);
-      area.select();
-      document.execCommand("copy");
-      area.remove();
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-  return (
-    <button
-      onClick={copy}
-      title="Einladungslink kopieren"
-      className={cn(
-        "inline-flex items-center gap-3 rounded-xl border border-line bg-surface font-mono font-bold tracking-[0.3em] transition-colors hover:border-line-strong",
-        large ? "h-20 px-7 text-4xl sm:text-5xl" : "h-10 px-3 text-sm",
-      )}
-    >
-      {code}
-      {copied ? <Check className="size-4 text-good" /> : <Copy className="size-4 text-faint" />}
-    </button>
-  );
-}
+// Page body for a mode: the stage and, on the right, the points list for
+// everyone (the host also gets its controls). `fill` makes the stage exactly
+// as high as the space above the cams, so a child with `flex-1 min-h-0` can
+// scroll inside instead of the page.
+export function ModeLayout({
+  children,
+  side,
+  board,
+  actions,
+  fill,
+}: {
+  children: ReactNode;
+  side?: ReactNode;
+  board?: ReactNode;
+  actions?: ReactNode;
+  fill?: boolean;
+}) {
+  const column = side || board;
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => setSlot(document.getElementById("host-actions")), []);
 
-// Page body for a mode: content plus a scoreboard column on wide screens.
-export function ModeLayout({ children, side, actions }: { children: ReactNode; side?: ReactNode; actions?: ReactNode }) {
   return (
     <>
-      <div className={cn("mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:gap-6", side && "lg:grid-cols-[minmax(0,1fr)_320px]")}>
-        <div className="min-w-0 space-y-4">{children}</div>
-        {side && <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">{side}</aside>}
+      <div
+        className={cn(
+          "mx-auto grid max-w-[1800px] gap-4 px-4 py-4 lg:gap-6",
+          column && "lg:grid-cols-[minmax(0,1fr)_300px]",
+          fill && "lg:h-full lg:grid-rows-[minmax(0,1fr)]",
+        )}
+      >
+        <div className={cn("flex min-w-0 flex-col gap-3", fill && "lg:min-h-0")}>{children}</div>
+        {column && (
+          <aside className={cn("min-w-0 space-y-4 lg:self-start", fill && "lg:max-h-full lg:overflow-y-auto")}>
+            {side}
+            {board}
+          </aside>
+        )}
       </div>
-      {actions && (
-        <>
-          <div className="h-24" />
-          <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-black/90 backdrop-blur-md">
-            <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-end gap-2 px-4 py-3">{actions}</div>
-          </div>
-        </>
-      )}
+      {actions && slot && createPortal(<div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-end gap-2 px-4 py-2.5">{actions}</div>, slot)}
     </>
   );
 }
@@ -123,36 +160,55 @@ export function StatusBanner({ tone = "neutral", children }: { tone?: "neutral" 
   );
 }
 
+// Title of a mode screen. The eyebrow ("Runde 2 von 5") goes to the top bar
+// to leave more room for the stage.
 export function ModeHeading({ eyebrow, title, meta }: { eyebrow: string; title: string; meta?: ReactNode }) {
+  useEffect(() => {
+    useHeaderStore.setState({ info: eyebrow });
+  }, [eyebrow]);
+  useEffect(() => () => useHeaderStore.setState({ info: null }), []);
   return (
-    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-      <div className="min-w-0">
-        <p className="label mb-2">{eyebrow}</p>
-        <h2 className="headline text-3xl sm:text-5xl">{title}</h2>
-      </div>
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <h2 className="headline min-w-0 text-2xl sm:text-3xl">{title}</h2>
       {meta && <div className="flex flex-wrap gap-2">{meta}</div>}
     </div>
   );
 }
 
 interface ScoreboardProps {
-  players: Player[];
-  title?: string;
+  players?: Player[];
   meId?: string | null;
+  title?: string;
   turnId?: string | null;
   dimmed?: (p: Player) => boolean;
   tone?: (p: Player) => "good" | "bad" | null;
   note?: (p: Player) => ReactNode;
+  tag?: (p: Player) => ReactNode;
+  score?: (p: Player) => number;
   controls?: (p: Player) => ReactNode;
   onSelect?: (p: Player) => void;
 }
 
-export function Scoreboard({ players, title = "Punkte dieser Runde", meId, turnId, dimmed, tone, note, controls, onSelect }: ScoreboardProps) {
-  const sorted = [...players].sort((a, b) => b.modeScore - a.modeScore || a.name.localeCompare(b.name, "de"));
+// Publishes what the mode says about each player to the cam tiles. The host
+// also gets the full list with the controls in the column on the right.
+export function Scoreboard({ players = [], title, meId, turnId, dimmed, tone, note, tag, score, controls: hostControls, onSelect: hostSelect }: ScoreboardProps) {
+  const role = useRoomStore((s) => s.role);
+  useEffect(() => {
+    useBoardStore.setState({ board: { turnId, dimmed, tone, note, tag, score } });
+  });
+  useEffect(() => () => useBoardStore.setState({ board: null }), []);
+  // Everyone sees the list; controls and the host's title only for the host.
+  const isHost = role === "host";
+  const controls = isHost ? hostControls : undefined;
+  const onSelect = isHost ? hostSelect : undefined;
+  if (!isHost) title = undefined;
+  title ??= "Punkte dieser Runde";
 
+  const points = (p: Player) => score?.(p) ?? p.modeScore;
+  const sorted = [...players].sort((a, b) => points(b) - points(a) || a.name.localeCompare(b.name, "de"));
   return (
-    <Panel className="p-4">
-      <PanelTitle className="mb-3">{title}</PanelTitle>
+    <Panel className="p-3">
+      <PanelTitle className="mb-2">{title}</PanelTitle>
       <ol className="space-y-1">
         {sorted.map((p, i) => {
           const Row = onSelect ? "button" : "div";
@@ -161,7 +217,7 @@ export function Scoreboard({ players, title = "Punkte dieser Runde", meId, turnI
               <Row
                 {...(onSelect ? { onClick: () => onSelect(p), type: "button" as const } : {})}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+                  "flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors",
                   p.id === turnId ? "border-accent/50 bg-accent-soft" : p.id === meId ? "border-white/20 bg-white/10" : "border-transparent bg-black/20",
                   (dimmed?.(p) || tone?.(p) === "bad") && "border-red-900/50 bg-bad-soft",
                   tone?.(p) === "good" && "border-green-500/30 bg-green-950/40",
@@ -173,15 +229,14 @@ export function Scoreboard({ players, title = "Punkte dieser Runde", meId, turnI
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className={cn("size-2 shrink-0 rounded-full", p.connected ? "bg-good" : "bg-bad")} title={p.connected ? "online" : "offline"} />
-                    <span className={cn("truncate text-lg font-bold uppercase italic", dimmed?.(p) && "line-through")}>{p.name}</span>
-                    {p.id === meId && <span className="font-mono text-xs text-faint">(du)</span>}
-                    {p.id === turnId && <span className="size-1.5 animate-pulse rounded-full bg-accent shadow-[0_0_8px_rgba(59,130,246,0.8)]" />}
+                    <span className={cn("truncate font-bold uppercase italic", dimmed?.(p) && "line-through")}>{p.name}</span>
+                    {tag && <span className="flex shrink-0 items-center text-sm">{tag(p)}</span>}
                   </span>
-                  {note && <span className="mt-0.5 block text-sm text-muted">{note(p)}</span>}
+                  {note?.(p) != null && <span className="mt-0.5 block text-sm text-muted">{note(p)}</span>}
                 </span>
-                <span className="text-2xl font-black italic tabular-nums">{p.modeScore}</span>
+                <AnimatedPoints value={points(p)} bubble={false} className="text-xl font-black italic" />
               </Row>
-              {controls && <div className="mt-1 mb-3 flex flex-wrap gap-1.5 pl-8">{controls(p)}</div>}
+              {controls && <div className="mt-1 mb-2 flex flex-wrap gap-1.5 pl-8">{controls(p)}</div>}
             </li>
           );
         })}

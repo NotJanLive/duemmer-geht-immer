@@ -12,6 +12,7 @@ import {
   Mode,
   PLANNABLE_MODES,
   PicState,
+  SongState,
   picPoints,
   picProgress,
   Player,
@@ -20,8 +21,10 @@ import {
   WwmAnswer,
   WwmQuestion,
 } from '../src/types/game';
-import { getPool, pickGeo, pickJeopardy, pickMillionaire, pickPictures, pickTopics, poolCounts } from './pool';
+import { getPool, pickGeo, pickJeopardy, pickMillionaire, pickPictures, pickSongs, pickTopics, poolCounts } from './pool';
 import { GeoContent, MapId, PicContent, PictureKind, distanceKm, geoPoints } from '../src/types/pool';
+import { Tally, emptyTally } from '../src/types/stats';
+import { ITUNES_COVER, SONG_POINTS, SONG_PREVIEW_SECONDS, SONG_STAGES, SongItem, sameSong } from '../src/types/pool';
 
 // Millionaire keeps every question on the server and only sends the current one.
 export interface WwmFull {
@@ -43,6 +46,7 @@ export interface GeoFull {
   endsAt: number;
   guesses: Record<string, GeoGuess>;
   revealed: boolean;
+  revealedAt: number | null; // server time, drives the reveal animation
   results: Record<string, GeoResult>;
 }
 
@@ -50,6 +54,12 @@ export interface GeoFull {
 export interface PicFull {
   rounds: { category: string; kind: PictureKind; items: PicContent['items'] }[];
   current: PicState;
+}
+
+// Songrätsel keeps all rounds on the server. `current` is the song playing.
+export interface SongFull {
+  rounds: { category: string; songs: SongItem[] }[];
+  current: SongState;
 }
 
 export interface Game {
@@ -62,8 +72,18 @@ export interface Game {
   hol: HolState | null;
   geo: GeoFull | null;
   pic: PicFull | null;
+  song: SongFull | null;
   jeo: JeoState | null;
   finaleStartedAt: number | null;
+  randomCount: number | null;
+  drawStartedAt: number | null;
+  // For the stats: points per finished mode and counters per player.
+  modePoints: Partial<Record<Mode, Record<string, number>>>;
+  tally: Record<string, Tally>;
+}
+
+function tally(game: Game, playerId: string): Tally {
+  return (game.tally[playerId] ??= emptyTally());
 }
 
 export function createGame(): Game {
@@ -77,8 +97,13 @@ export function createGame(): Game {
     hol: null,
     geo: null,
     pic: null,
+    song: null,
     jeo: null,
     finaleStartedAt: null,
+    randomCount: null,
+    drawStartedAt: null,
+    modePoints: {},
+    tally: {},
   };
 }
 
@@ -184,6 +209,7 @@ function setupMode(game: Game, mode: Mode) {
         endsAt: Date.now() + settings.geoSeconds * 1000,
         guesses: {},
         revealed: false,
+        revealedAt: null,
         results: {},
       };
       break;
@@ -203,6 +229,12 @@ function setupMode(game: Game, mode: Mode) {
           revealSeconds: settings.picRevealSeconds,
         },
       };
+      break;
+    }
+    case 'songs': {
+      const rounds = pickSongs(settings.songRounds, settings.songPerRound).map((r) => ({ category: r.category.name, songs: r.songs }));
+      if (!rounds.length) break;
+      game.song = { rounds, current: songItem(game, rounds, 0, 0) };
       break;
     }
     case 'jeopardy':
@@ -287,6 +319,12 @@ function closeJeopardyQuestion(game: Game, jeo: JeoState, status: 'answered' | '
   jeo.chooserId = nextPlayerId(game, jeo.chooserId, () => true);
 }
 
+// Modes that can be drawn: everything but the final, with content in the pool.
+function playableModes(): Mode[] {
+  const counts = poolCounts();
+  return PLANNABLE_MODES.filter((m) => counts[m] > 0);
+}
+
 // Host actions. Returns false when the action does not apply.
 export function applyHostAction(game: Game, action: HostAction): boolean {
   switch (action.type) {
@@ -296,12 +334,35 @@ export function applyHostAction(game: Game, action: HostAction): boolean {
       game.plan = [...modes, FINAL_MODE];
       return true;
     }
+    case 'plan.random': {
+      if (game.screen !== 'lobby') return false;
+      const max = playableModes().length;
+      game.randomCount = action.count === null ? null : Math.max(1, Math.min(max, Math.floor(Number(action.count)) || 1));
+      return true;
+    }
     case 'start': {
       if (game.screen !== 'lobby' || game.players.length === 0) return false;
-      // A mode without content in the pool cannot be played.
+      if (game.randomCount) {
+        // Draw the games now; the slot machine shows them, then the host starts.
+        const pool = playableModes();
+        if (!pool.length || poolCounts()[FINAL_MODE] === 0) return false;
+        game.plan = [...shuffle(pool).slice(0, game.randomCount), FINAL_MODE];
+        game.modeIndex = 0;
+        game.screen = 'draw';
+        game.drawStartedAt = Date.now();
+        return true;
+      }
+      // A mode without content in the pool cannot be played. The chosen plan
+      // is shown through the slot machine too, the players only see it there.
       const counts = poolCounts();
       if (game.plan.some((m) => counts[m] === 0)) return false;
       game.modeIndex = 0;
+      game.screen = 'draw';
+      game.drawStartedAt = Date.now();
+      return true;
+    }
+    case 'draw.done': {
+      if (game.screen !== 'draw') return false;
       game.screen = game.plan[0];
       setupMode(game, game.plan[0]);
       return true;
@@ -314,11 +375,13 @@ export function applyHostAction(game: Game, action: HostAction): boolean {
     }
     case 'nextMode': {
       if (game.screen !== 'leaderboard') return false;
+      const finished = game.plan[game.modeIndex];
+      game.modePoints[finished] = Object.fromEntries(game.players.map((p) => [p.id, p.modeScore]));
       for (const p of game.players) {
         p.totalScore += p.modeScore;
         p.modeScore = 0;
       }
-      game.lms = game.wwm = game.hol = game.geo = game.pic = game.jeo = null;
+      game.lms = game.wwm = game.hol = game.geo = game.pic = game.song = game.jeo = null;
       game.modeIndex++;
       if (game.modeIndex < game.plan.length) {
         game.screen = game.plan[game.modeIndex];
@@ -341,6 +404,7 @@ export function applyHostAction(game: Game, action: HostAction): boolean {
   if (game.screen === 'higherLower' && game.hol) return holAction(game, game.hol, action);
   if (game.screen === 'geo' && game.geo) return geoAction(game, game.geo, action);
   if (game.screen === 'pictures' && game.pic) return picAction(game, game.pic, action);
+  if (game.screen === 'songs' && game.song) return songAction(game, game.song, action);
   if (game.screen === 'jeopardy' && game.jeo) return jeoAction(game, game.jeo, action);
   return false;
 }
@@ -397,6 +461,10 @@ function wwmAction(game: Game, wwm: WwmFull, action: HostAction): boolean {
         if (!answer) continue;
         answer.correct = answer.locked && answer.answer === question.correctAnswer;
         if (answer.correct) p.modeScore += question.points;
+      }
+      for (const p of game.players) {
+        tally(game, p.id).wwmSeen++;
+        if (wwm.answers[p.id]?.correct) tally(game, p.id).wwmCorrect++;
       }
       wwm.revealed = true;
       return true;
@@ -461,8 +529,11 @@ function geoAction(game: Game, geo: GeoFull, action: HostAction): boolean {
         const points = geoPoints(km, geo.minKm, geo.maxPoints);
         geo.results[p.id] = { distanceKm: Math.round(km * 10) / 10, points };
         p.modeScore += points;
+        tally(game, p.id).geoGuesses++;
+        tally(game, p.id).geoKm += km;
       }
       geo.revealed = true;
+      geo.revealedAt = Date.now();
       return true;
     }
     case 'geo.next': {
@@ -471,6 +542,7 @@ function geoAction(game: Game, geo: GeoFull, action: HostAction): boolean {
       geo.guesses = {};
       geo.results = {};
       geo.revealed = false;
+      geo.revealedAt = null;
       geo.endsAt = Date.now() + geo.seconds * 1000;
       return true;
     }
@@ -495,6 +567,7 @@ function picAction(game: Game, pic: PicFull, action: HostAction): boolean {
         const player = findPlayer(game, head.playerId);
         cur.awarded = picPoints(cur, head.progress);
         if (player) player.modeScore += cur.awarded;
+        tally(game, head.playerId).picSolved++;
         cur.winnerId = head.playerId;
         cur.answeringId = null;
         cur.status = 'solved';
@@ -534,6 +607,96 @@ function picAction(game: Game, pic: PicFull, action: HostAction): boolean {
   return false;
 }
 
+// Songrätsel
+
+// Snippets play as soon as the command arrives: the host hears it right at the
+// click, players a few milliseconds later (they have all the time to guess).
+
+function songItem(game: Game, rounds: SongFull['rounds'], r: number, i: number): SongState {
+  const song = rounds[r].songs[i];
+  for (const p of game.players) tally(game, p.id).songSeen++;
+  return {
+    category: rounds[r].category,
+    roundIndex: r,
+    roundCount: rounds.length,
+    itemIndex: i,
+    itemCount: rounds[r].songs.length,
+    preview: song.preview,
+    offset: song.offset,
+    stage: 0,
+    play: null,
+    revealed: false,
+    reveal: null,
+    pausedAt: null,
+    answer: { trackId: song.trackId, title: song.title, artist: song.artist, cover: song.cover },
+    guesses: {},
+    extend: [],
+  };
+}
+
+function songAction(game: Game, song: SongFull, action: HostAction): boolean {
+  const cur = song.current;
+  const now = Date.now();
+  switch (action.type) {
+    case 'song.play':
+      if (cur.revealed) return false;
+      cur.play = { stage: cur.stage, at: now };
+      return true;
+    case 'song.stage':
+      // Unlocks the next stage; the host plays it with the next click.
+      if (cur.revealed || cur.stage >= SONG_STAGES.length - 1) return false;
+      cur.stage++;
+      cur.extend = [];
+      return true;
+    case 'song.reveal': {
+      // Only after the last stage, or when everyone has locked in.
+      const allIn = game.players.length > 0 && game.players.every((p) => cur.guesses[p.id]);
+      if (cur.revealed || (cur.stage < SONG_STAGES.length - 1 && !allIn)) return false;
+      cur.revealed = true;
+      cur.play = null;
+      cur.extend = [];
+      cur.reveal = { at: now, from: 0 };
+      cur.pausedAt = null;
+      // Points only now, so nobody knows before who was right.
+      for (const [playerId, guess] of Object.entries(cur.guesses)) {
+        if (!guess.correct) continue;
+        guess.points = SONG_POINTS[guess.stage];
+        const player = findPlayer(game, playerId);
+        if (player) player.modeScore += guess.points;
+        tally(game, playerId).songSolved++;
+        tally(game, playerId).songStages += guess.stage + 1;
+      }
+      return true;
+    }
+    case 'song.pause': {
+      // Pause or go on with the whole preview after the reveal.
+      if (!cur.revealed) return false;
+      if (cur.reveal) {
+        const pos = cur.reveal.from + (now - cur.reveal.at) / 1000;
+        cur.reveal = null;
+        cur.pausedAt = pos >= SONG_PREVIEW_SECONDS ? 0 : pos;
+      } else {
+        cur.reveal = { at: now, from: cur.pausedAt ?? 0 };
+        cur.pausedAt = null;
+      }
+      return true;
+    }
+    case 'song.next': {
+      if (!cur.revealed) return false;
+      let r = cur.roundIndex;
+      let i = cur.itemIndex + 1;
+      if (i >= song.rounds[r].songs.length) {
+        r++;
+        i = 0;
+      }
+      if (r >= song.rounds.length) return false;
+      song.current = songItem(game, song.rounds, r, i);
+      return true;
+    }
+  }
+  return false;
+}
+
 function jeoAction(game: Game, jeo: JeoState, action: HostAction): boolean {
   const active = jeo.active;
 
@@ -541,11 +704,14 @@ function jeoAction(game: Game, jeo: JeoState, action: HostAction): boolean {
     case 'jeo.select': {
       const question = jeo.categories[action.categoryIndex]?.questions[action.questionIndex];
       if (!question || question.status !== 'open' || active) return false;
+      question.chooserId = jeo.chooserId ?? undefined;
+      question.attempts = [];
       jeo.active = {
         categoryIndex: action.categoryIndex,
         questionIndex: action.questionIndex,
         points: question.points,
         originalPoints: question.points,
+        penalty: Math.floor(question.points / 2),
         answeringId: jeo.chooserId,
         buzzerOpen: false,
         tried: [],
@@ -555,17 +721,22 @@ function jeoAction(game: Game, jeo: JeoState, action: HostAction): boolean {
     }
     case 'jeo.judge': {
       if (!active?.answeringId) return false;
+      const question = jeo.categories[active.categoryIndex].questions[active.questionIndex];
+      const player = findPlayer(game, active.answeringId);
+      (question.attempts ??= []).push({ playerId: active.answeringId, correct: action.correct });
       if (action.correct) {
-        const player = findPlayer(game, active.answeringId);
         if (player) player.modeScore += active.points;
+        tally(game, active.answeringId).jeoCorrect++;
         closeJeopardyQuestion(game, jeo, 'answered', active.answeringId);
         return true;
       }
+      // Every wrong answer, the chooser's too, costs half the field, and from
+      // then on the field is only worth half.
+      if (player) player.modeScore -= active.penalty;
+      active.points = Math.floor(active.originalPoints / 2);
+      tally(game, active.answeringId).jeoWrong++;
       active.tried.push(active.answeringId);
-      if (active.firstAttempt) {
-        active.points = Math.floor(active.points / 2);
-        active.firstAttempt = false;
-      }
+      active.firstAttempt = false;
       active.answeringId = null;
       // When everyone who is online has tried, the buzzer starts over for all.
       const left = game.players.filter((p) => p.connected && !active.tried.includes(p.id));
@@ -639,6 +810,26 @@ export function applyPlayerAction(game: Game, playerId: string, action: PlayerAc
       }
       cur.queue.push({ playerId, progress: picProgress(cur, cur.elapsedMs), wrong: false });
       cur.answeringId ??= playerId;
+      return true;
+    }
+    case 'song.guess': {
+      // One guess per song. Checked now, told at the reveal.
+      const cur = game.screen === 'songs' ? game.song?.current : null;
+      if (!cur || cur.revealed || !cur.answer || cur.guesses[playerId]) return false;
+      const trackId = Number(action.trackId);
+      const title = typeof action.title === 'string' ? action.title.slice(0, 200) : '';
+      const artist = typeof action.artist === 'string' ? action.artist.slice(0, 200) : '';
+      const cover = typeof action.cover === 'string' && ITUNES_COVER.test(action.cover) ? action.cover : '';
+      if (!Number.isInteger(trackId) || !title) return false;
+      cur.guesses[playerId] = { stage: cur.stage, trackId, title, artist, cover, correct: sameSong({ trackId, title, artist }, cur.answer), points: 0 };
+      cur.extend = cur.extend.filter((id) => id !== playerId);
+      return true;
+    }
+    case 'song.extend': {
+      // "Verlängern": a wish to the host, switched on and off.
+      const cur = game.screen === 'songs' ? game.song?.current : null;
+      if (!cur || cur.revealed || cur.guesses[playerId]) return false;
+      cur.extend = cur.extend.includes(playerId) ? cur.extend.filter((id) => id !== playerId) : [...cur.extend, playerId];
       return true;
     }
     case 'jeo.buzz': {

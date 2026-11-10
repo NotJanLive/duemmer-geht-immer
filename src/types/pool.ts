@@ -1,8 +1,8 @@
 // Question pool shared by the server and the admin page.
 
-export type PoolMode = 'lastManStanding' | 'millionaire' | 'higherLower' | 'geo' | 'pictures' | 'jeopardy';
+export type PoolMode = 'lastManStanding' | 'millionaire' | 'higherLower' | 'geo' | 'pictures' | 'songs' | 'jeopardy';
 
-export const POOL_MODES: PoolMode[] = ['lastManStanding', 'millionaire', 'higherLower', 'geo', 'pictures', 'jeopardy'];
+export const POOL_MODES: PoolMode[] = ['lastManStanding', 'millionaire', 'higherLower', 'geo', 'pictures', 'songs', 'jeopardy'];
 
 // Uploaded images are served from /media/<file>.
 export const MEDIA_PATTERN = /^\/media\/[a-f0-9-]+\.(jpg|jpeg|png|webp|gif|avif)$/;
@@ -112,12 +112,64 @@ export interface PicContent {
   items: { image: string; answer: string }[];
 }
 
+// Songrätsel: a category is one round of songs. Audio and search come from
+// Apple's iTunes Search API (free, no login): every track has a 30 s preview in
+// good quality (AAC ~256 kbit/s), stable URLs, CORS open. Spotify no longer
+// gives previews to new apps (Nov 2024) and full playback would need Premium
+// for every player, so it is not used. `offset` is where in the 30 s preview
+// the snippet starts.
+export interface SongItem {
+  trackId: number;
+  title: string;
+  artist: string;
+  cover: string;
+  preview: string;
+  offset: number; // seconds into the preview
+}
+
+export interface SongContent {
+  name: string;
+  songs: SongItem[];
+}
+
+// Snippet lengths in seconds and what a right guess at that stage is worth.
+export const SONG_STAGES = [0.2, 0.5, 1, 3, 5];
+export const SONG_POINTS = [5, 4, 3, 2, 1];
+export const SONG_PREVIEW_SECONDS = 30;
+
+export const ITUNES_PREVIEW = /^https:\/\/audio-ssl\.itunes\.apple\.com\/itunes-assets\/[\w/.-]+\.m4a$/;
+export const ITUNES_COVER = /^https:\/\/is\d-ssl\.mzstatic\.com\/[\w/.,%-]+$/;
+
+// "Mr. Brightside (Remastered 2019) [feat. X]" -> "mr brightside". A guess is
+// right for the same track or the same title by the same main artist, so other
+// versions of the song count too.
+export function normalizeTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/\s*[([].*?[)\]]/g, '')
+    .replace(/\s+-\s+.*$/, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+export function mainArtist(artist: string): string {
+  return normalizeTitle(artist.split(/,|&| feat\.?| ft\.?| x | und /i)[0] ?? artist);
+}
+
+export function sameSong(a: { trackId: number; title: string; artist: string }, b: { trackId: number; title: string; artist: string }): boolean {
+  if (a.trackId === b.trackId) return true;
+  return normalizeTitle(a.title) === normalizeTitle(b.title) && mainArtist(a.artist) === mainArtist(b.artist);
+}
+
 export interface PoolContent {
   lastManStanding: LmsContent;
   millionaire: WwmContent;
   higherLower: HolContent;
   geo: GeoContent;
   pictures: PicContent;
+  songs: SongContent;
   jeopardy: JeoContent;
 }
 
@@ -144,6 +196,8 @@ export interface PoolSettings {
   picPerRound: number; // pictures per category
   picTiers: PicTier[]; // points by reveal progress, Schmobin's 5 / 3 / 1
   picRevealSeconds: number; // until the picture is fully shown
+  songRounds: number; // categories per show
+  songPerRound: number; // songs per category
   jeoCategories: number;
   jeoPoints: number[];
 }
@@ -164,6 +218,8 @@ export const DEFAULT_SETTINGS: PoolSettings = {
     { until: 100, points: 1 },
   ],
   picRevealSeconds: 60,
+  songRounds: 1,
+  songPerRound: 10,
   jeoCategories: 5,
   jeoPoints: [10, 20, 30, 40, 50],
 };

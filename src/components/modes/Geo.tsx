@@ -1,47 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { ArrowRight, Eye, Timer } from "lucide-react";
 import { useGame, useRoomStore } from "@/lib/store";
 import { hostAction, playerAction } from "@/lib/socket";
 import { useServerNow } from "@/lib/useServerNow";
 import { Button, Panel, Pill } from "@/components/ui";
 import { ModeHeading, ModeLayout, Scoreboard, StatusBanner } from "@/components/room/Shell";
-import GeoMap, { MapLine, MapMarker } from "@/components/GeoMap";
+import GeoMap, { MapCamera, MapLine, MapMarker } from "@/components/GeoMap";
 import { MAPS } from "@/types/pool";
+import { GEO_BACK_MS, GEO_INTRO_MS, GEO_LINE_MS, geoTimeline } from "@/lib/geoReveal";
 
 // Pin colours per player, in alphabetical order of the names. Your own is blue.
 const PLAYER_COLORS = ["#f97316", "#ec4899", "#a855f7", "#14b8a6", "#eab308", "#ef4444", "#84cc16", "#06b6d4"];
 const OWN_COLOR = "#3b82f6";
 const TARGET_COLOR = "#22c55e";
 
-// Reveal timeline in ms: pins pop one after another, then the target drops,
-// then the lines are drawn and the numbers count up.
-const PIN_STEP = 180;
-const TARGET_GAP = 300;
-const LINE_GAP = 550;
-const LINE_STEP = 120;
-const COUNT_GAP = 400;
-const COUNT_MS = 1100;
+// Reveal, one player after another, farthest first (timeline in
+// lib/geoReveal.ts): the map zooms to the place, then for each player it comes
+// back to the place, the line runs out to their pin while the map follows and
+// the distance counts up in the list, then their points show. At the end the
+// map shows everyone.
+const INTRO_MS = GEO_INTRO_MS;
+const BACK_MS = GEO_BACK_MS;
+const LINE_MS = GEO_LINE_MS;
+const ease = (t: number) => 1 - (1 - Math.min(1, Math.max(0, t))) ** 3;
 
 const km = (d: number) => (d < 10 ? `${d.toLocaleString("de-DE", { maximumFractionDigits: 1 })} km` : `${Math.round(d).toLocaleString("de-DE")} km`);
-
-// Counts from 0 to `value` after `delay`, easing out. Restarts when `run` changes.
-function CountUp({ value, delay, run, format }: { value: number; delay: number; run: string; format: (n: number) => string }) {
-  const [shown, setShown] = useState(0);
-  useEffect(() => {
-    let frame = 0;
-    const start = performance.now() + delay;
-    const tick = (t: number) => {
-      const p = Math.min(1, Math.max(0, (t - start) / COUNT_MS));
-      setShown(value * (1 - (1 - p) ** 3));
-      if (p < 1) frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [value, delay, run]);
-  return <>{format(shown)}</>;
-}
 
 export default function Geo() {
   const game = useGame();
@@ -61,33 +45,58 @@ export default function Geo() {
   const order = [...game.players].sort((a, b) => a.name.localeCompare(b.name, "de"));
   const colorOf = (id: string) => (id === meId ? OWN_COLOR : PLAYER_COLORS[order.findIndex((p) => p.id === id) % PLAYER_COLORS.length]);
   const run = `${geo.index}`;
-
-  // Who set a pin, in a stable order, for the reveal timeline.
   const guessed = order.filter((p) => geo.guesses[p.id]);
-  const targetDelay = guessed.length * PIN_STEP + TARGET_GAP;
-  const lineDelay = (i: number) => targetDelay + LINE_GAP + i * LINE_STEP;
-  const countDelay = lineDelay(guessed.length) + COUNT_GAP;
+
+  // Reveal timeline.
+  const revealNow = useServerNow(geo.revealed && geo.revealedAt !== null, 40);
+  const { sequence, elapsed, done, stepAt, progressOf, shown, current, score } = geoTimeline(game, revealNow);
 
   const markers: MapMarker[] = [];
   const lines: MapLine[] = [];
+  let camera: MapCamera | null = null;
   if (geo.revealed && target) {
-    guessed.forEach((p, i) => {
+    markers.push({ id: `${run}-target`, ...target, color: TARGET_COLOR, label: geo.place.name, target: true, delay: Math.min(0, -elapsed) });
+    sequence.forEach((p, i) => {
+      if (elapsed < stepAt(i)) return;
       const g = geo.guesses[p.id]!;
-      markers.push({ id: `${run}-${p.id}`, ...g, color: colorOf(p.id), label: p.name, delay: i * PIN_STEP });
       const r = geo.results[p.id];
-      lines.push({ id: `${run}-${p.id}`, from: g, to: target, color: colorOf(p.id), label: r ? km(r.distanceKm) : undefined, delay: lineDelay(i) });
+      const lineStart = stepAt(i) + BACK_MS;
+      markers.push({ id: `${run}-${p.id}`, ...g, color: colorOf(p.id), label: p.name, delay: Math.min(0, stepAt(i) - elapsed) });
+      if (elapsed >= lineStart) {
+        lines.push({
+          id: `${run}-${p.id}`,
+          from: target,
+          to: g,
+          color: colorOf(p.id),
+          label: r ? km(r.distanceKm) : undefined,
+          delay: Math.min(0, lineStart - elapsed),
+          duration: LINE_MS,
+        });
+      }
     });
-    markers.push({ id: `${run}-target`, ...target, color: TARGET_COLOR, label: geo.place.name, target: true, delay: targetDelay });
-  } else if (isHost) {
+    if (elapsed < INTRO_MS) camera = { key: `${run}-intro`, points: [target], duration: INTRO_MS - 200 };
+    else if (done) camera = { key: `${run}-all`, points: [target, ...guessed.map((p) => geo.guesses[p.id]!)], duration: 1500 };
+    else {
+      const t = elapsed - stepAt(current);
+      const pin = geo.guesses[sequence[current].id]!;
+      camera = t < BACK_MS ? { key: `${run}-${current}-back`, points: [target], duration: BACK_MS } : { key: `${run}-${current}-line`, points: [target, pin], duration: LINE_MS };
+    }
+  } else {
+    // A new place starts on the whole map again.
+    camera = { key: `${run}-home`, points: [], duration: 900 };
+  }
+  if (!geo.revealed && isHost) {
     // The host watches the pins come in live.
     for (const p of guessed) markers.push({ id: `${run}-${p.id}`, ...geo.guesses[p.id]!, color: colorOf(p.id), label: p.name, delay: 0 });
-  } else if (mine) {
+  } else if (!geo.revealed && mine) {
     markers.push({ id: `${run}-mine`, ...mine, color: OWN_COLOR, delay: 0 });
   }
 
   let banner = null;
   if (!isHost) {
-    if (geo.revealed) {
+    if (geo.revealed && !(meId && shown(meId))) {
+      banner = null;
+    } else if (geo.revealed) {
       banner = myResult ? (
         <StatusBanner tone={myResult.points > 0 ? "good" : "bad"}>
           {km(myResult.distanceKm)} daneben, +{myResult.points} {myResult.points === 1 ? "Punkt" : "Punkte"}
@@ -98,29 +107,31 @@ export default function Geo() {
     } else if (!open) {
       banner = <StatusBanner>{mine ? "Zeit um. Warte auf die Auflösung." : "Zeit um, kein Pin gesetzt"}</StatusBanner>;
     } else {
-      banner = <StatusBanner tone={mine ? "accent" : "neutral"}>{mine ? "Pin gesetzt. Du kannst ihn noch verschieben." : "Tippe auf die Karte"}</StatusBanner>;
+      banner = mine ? <StatusBanner tone="accent">Pin gesetzt. Du kannst ihn noch verschieben.</StatusBanner> : null;
     }
   }
 
   return (
     <ModeLayout
-      side={
+      fill
+      board={
         <Scoreboard
           players={game.players}
           meId={meId}
-          tone={(p) => (geo.revealed ? (geo.results[p.id] ? "good" : "bad") : null)}
+          tone={(p) => (geo.revealed && progressOf(p.id) >= 1 ? (geo.results[p.id] ? "good" : "bad") : null)}
+          turnId={!done && current >= 0 && elapsed - stepAt(current) >= BACK_MS ? sequence[current]?.id : null}
+          // Points this place gave only count once the player's line is done.
+          score={score}
           note={(p) => {
             if (geo.revealed) {
               const r = geo.results[p.id];
-              if (!r) return "Kein Pin";
+              if (!r) return done ? "Kein Pin" : "…";
+              const t = progressOf(p.id);
+              if (t <= 0) return "…";
               return (
                 <span className="inline-flex items-baseline gap-2 font-mono tabular-nums">
-                  <span>
-                    <CountUp value={r.distanceKm} delay={countDelay} run={run} format={(n) => km(n)} />
-                  </span>
-                  <span className="font-bold text-green-500">
-                    +<CountUp value={r.points} delay={countDelay} run={run} format={(n) => String(Math.round(n))} />
-                  </span>
+                  <span>{km(r.distanceKm * ease(t))}</span>
+                  {t >= 1 && <span className="animate-pop font-bold text-green-500">+{r.points}</span>}
                 </span>
               );
             }
@@ -165,19 +176,23 @@ export default function Geo() {
       {geo.place.image && (
         <Panel className="overflow-hidden p-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={geo.place.image} alt="" className="max-h-[45vh] w-full object-contain" />
+          <img src={geo.place.image} alt="" className="max-h-[45vh] w-full object-contain lg:max-h-[22vh]" />
         </Panel>
       )}
 
       {banner}
 
-      <Panel className="stripe p-2 sm:p-3">
+      {/* The map is as big as the space left above the cams. */}
+      <Panel className="stripe flex flex-col p-2 sm:p-3 lg:min-h-0 lg:flex-1">
+        <div className="fit-box">
         <GeoMap
           map={geo.map}
+          camera={camera}
           markers={markers}
           lines={lines}
-          onPick={!isHost && open ? (pos) => playerAction({ type: "geo.guess", ...pos }) : undefined}
+          onPick={!!meId && open ? (pos) => playerAction({ type: "geo.guess", ...pos }) : undefined}
         />
+        </div>
       </Panel>
     </ModeLayout>
   );
