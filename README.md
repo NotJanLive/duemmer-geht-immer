@@ -44,7 +44,8 @@ Umgebungsvariablen:
 | `SESSION_SECRET` | Schlüssel für Login-Cookies, Overlay-Link und Kamera-IDs |
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | Discord-App für den Login |
 | `DISCORD_BOT_TOKEN` | Bot für Slash-Befehle, Gewinner-Rolle und Namen |
-| `DISCORD_GUILD_ID` | Server, dessen Mitglieder sich anmelden dürfen |
+| `DISCORD_GUILD_ID` | Hauptserver: Host, Bot-Befehle, Gewinner-Rolle; seine Mitglieder dürfen sich anmelden |
+| `DISCORD_EXTRA_GUILD_IDS` | Weitere Server (Komma-Liste), deren Mitglieder sich auch anmelden dürfen |
 | `DISCORD_WINNER_ROLE_ID` | Rolle für den letzten Gewinner |
 | `HOST_DISCORD_IDS` | Wer hosten darf (Komma-Liste). Leer = Eigentümer des Servers |
 | `BOT_WINNER` | `on` = Rolle und Namen wirklich ändern (nur Produktion) |

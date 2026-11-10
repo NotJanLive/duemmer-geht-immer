@@ -13,7 +13,7 @@ import { LeaderboardRow, Me, PlayerStats } from "@/types/stats";
 import { SCREEN_LABELS } from "@/types/game";
 
 const ERRORS: Record<string, string> = {
-  member: "Nur Mitglieder des Dümmer-geht-immer-Servers können mitspielen.",
+  member: "Nur Mitglieder unserer Discord-Server können mitspielen.",
   state: "Die Anmeldung ist abgelaufen. Versuch es noch mal.",
   login: "Die Anmeldung hat nicht geklappt.",
   setup: "Die Discord-Anmeldung ist auf dem Server noch nicht eingerichtet.",

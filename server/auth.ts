@@ -101,7 +101,7 @@ export async function handleAuth(req: IncomingMessage, res: ServerResponse) {
         id: member.user.id,
         username: member.user.username,
         name: memberName(member),
-        avatar: avatarUrl(member.user.id, member.user.avatar, member.avatar),
+        avatar: avatarUrl(member.user.id, member.user.avatar, member.avatar, member.guildId),
       });
       return redirect(res, '/', [clearState, sessionCookie(member.user.id)]);
     } catch (err) {

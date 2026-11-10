@@ -28,8 +28,8 @@ async function bot<T>(method: string, route: string, body?: unknown): Promise<T>
   return (res.status === 204 ? undefined : await res.json()) as T;
 }
 
-export function avatarUrl(userId: string, hash: string | null, memberHash?: string | null): string | null {
-  if (memberHash) return `https://cdn.discordapp.com/guilds/${config.guildId}/users/${userId}/avatars/${memberHash}.png?size=128`;
+export function avatarUrl(userId: string, hash: string | null, memberHash?: string | null, guildId = config.guildId): string | null {
+  if (memberHash) return `https://cdn.discordapp.com/guilds/${guildId}/users/${userId}/avatars/${memberHash}.png?size=128`;
   if (hash) return `https://cdn.discordapp.com/avatars/${userId}/${hash}.png?size=128`;
   return null;
 }
@@ -52,9 +52,9 @@ export function authorizeUrl(state: string): string {
   return `https://discord.com/oauth2/authorize?${q}`;
 }
 
-// Exchanges the code and returns the member of our server, or null when the
-// user is not on it.
-export async function memberFromCode(code: string): Promise<DiscordMember | null> {
+// Exchanges the code and returns the member of the first allowed server the
+// user is on (main server first), or null when they are on none of them.
+export async function memberFromCode(code: string): Promise<(DiscordMember & { guildId: string }) | null> {
   const tokenRes = await fetch(`${API}/oauth2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -68,12 +68,15 @@ export async function memberFromCode(code: string): Promise<DiscordMember | null
   });
   if (!tokenRes.ok) throw new Error(`OAuth token: ${tokenRes.status} ${await tokenRes.text()}`);
   const { access_token } = (await tokenRes.json()) as { access_token: string };
-  const res = await fetch(`${API}/users/@me/guilds/${config.guildId}/member`, {
-    headers: { Authorization: `Bearer ${access_token}` },
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Member lookup: ${res.status} ${await res.text()}`);
-  return (await res.json()) as DiscordMember;
+  for (const guildId of config.loginGuildIds) {
+    const res = await fetch(`${API}/users/@me/guilds/${guildId}/member`, {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+    if (res.status === 404) continue;
+    if (!res.ok) throw new Error(`Member lookup: ${res.status} ${await res.text()}`);
+    return { ...((await res.json()) as DiscordMember), guildId };
+  }
+  return null;
 }
 
 // Host

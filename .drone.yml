@@ -53,9 +53,9 @@ steps:
           -e DISCORD_CLIENT_SECRET="$DISCORD_CLIENT_SECRET" \
           -e DISCORD_BOT_TOKEN="$DISCORD_BOT_TOKEN" \
           -e DISCORD_GUILD_ID=1355322631641104385 \
-          -e DISCORD_WINNER_ROLE_ID=1361337620403322882 \
+          -e DISCORD_EXTRA_GUILD_IDS=801069007997370378 \
           -e PUBLIC_URL=https://quiz.notjan.de \
-          -e BOT_WINNER=on \
+          -e BOT_WINNER=off \
           -v duemmer_geht_immer:/app \
           -v duemmer_geht_immer_data:/data \
           -w /app \

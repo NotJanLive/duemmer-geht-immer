@@ -8,7 +8,10 @@ export const config = {
   clientId: env.DISCORD_CLIENT_ID || '',
   clientSecret: env.DISCORD_CLIENT_SECRET || '',
   botToken: env.DISCORD_BOT_TOKEN || '',
+  // Main server: host, bot commands, winner role.
   guildId: env.DISCORD_GUILD_ID || '',
+  // Every server whose members may log in (comma separated), the main one included.
+  loginGuildIds: [env.DISCORD_GUILD_ID, ...(env.DISCORD_EXTRA_GUILD_IDS || '').split(',')].map((s) => (s ?? '').trim()).filter(Boolean),
   winnerRoleId: env.DISCORD_WINNER_ROLE_ID || '',
   // Comma separated. Empty means the owner of the Discord server.
   hostIds: (env.HOST_DISCORD_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
